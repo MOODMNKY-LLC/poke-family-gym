@@ -4,40 +4,132 @@ import { encodedRedirect } from "@/utils/utils";
 import { createClient } from "@/utils/supabase/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { validateStarterPokemon } from "@/utils/pokemon";
 
-export const signUpAction = async (formData: FormData) => {
+interface SignUpResponse {
+  error?: { message: string }
+  success?: boolean
+}
+
+export const signUpAction = async (formData: FormData): Promise<SignUpResponse> => {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
+  const familyName = formData.get("family_name")?.toString();
+  const starterPokemonFormId = formData.get("starter_pokemon_form_id")?.toString();
+  const starterPokemonNickname = formData.get("starter_pokemon_nickname")?.toString();
   const supabase = await createClient();
   const origin = (await headers()).get("origin");
 
-  if (!email || !password) {
-    return encodedRedirect(
-      "error",
-      "/sign-up",
-      "Email and password are required",
-    );
+  if (!email || !password || !familyName || !starterPokemonFormId || !starterPokemonNickname) {
+    return { error: { message: "All fields including starter Pokémon selection are required" } }
   }
 
-  const { error } = await supabase.auth.signUp({
+  // First check if a profile already exists with this family name
+  const { data: existingProfile } = await supabase
+    .from('family_profiles')
+    .select('family_name')
+    .eq('family_name', familyName)
+    .single()
+
+  if (existingProfile) {
+    return { error: { message: "This family name is already taken. Please choose another." } }
+  }
+
+  // Proceed with user creation
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       emailRedirectTo: `${origin}/auth/callback`,
+      data: {
+        family_name: familyName,
+        starter_pokemon_form_id: parseInt(starterPokemonFormId),
+        starter_pokemon_nickname: starterPokemonNickname
+      }
     },
   });
 
   if (error) {
-    console.error(error.code + " " + error.message);
-    return encodedRedirect("error", "/sign-up", error.message);
-  } else {
-    return encodedRedirect(
-      "success",
-      "/sign-up",
-      "Thanks for signing up! Please check your email for a verification link.",
-    );
+    console.error(error.code + " " + error.message)
+    return { error: { message: error.message } }
   }
-};
+
+  // Create initial family profile if user was created
+  if (data?.user) {
+    // First check if a profile already exists for this user
+    const { data: existingUserProfile } = await supabase
+      .from('family_profiles')
+      .select('id')
+      .eq('id', data.user.id)
+      .single()
+
+    if (existingUserProfile) {
+      console.log('Profile already exists for user')
+      return { success: true }
+    }
+
+    // Create new profile if one doesn't exist
+    const { error: profileError } = await supabase
+      .from('family_profiles')
+      .insert({
+        id: data.user.id,
+        family_name: familyName,
+        timezone: 'UTC',
+        locale: 'en',
+        settings: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    if (profileError) {
+      console.error('Failed to create family profile:', profileError)
+      // If profile creation fails, we should clean up the auth user
+      const { error: deleteError } = await supabase.auth.admin.deleteUser(data.user.id)
+      if (deleteError) console.error('Failed to clean up auth user:', deleteError)
+      
+      return { error: { message: "Failed to create family profile. Please try again." } }
+    }
+
+    // Create initial admin family member with starter pokemon and PIN
+    const { error: memberError } = await supabase
+      .from('family_members')
+      .insert({
+        family_id: data.user.id,
+        display_name: familyName,
+        full_name: familyName,
+        role_id: 1, // Admin role
+        current_status: 'online',
+        starter_pokemon_form_id: parseInt(starterPokemonFormId),
+        starter_pokemon_nickname: starterPokemonNickname,
+        starter_pokemon_obtained_at: new Date().toISOString(),
+        pin: formData.get('pin')
+      })
+
+    if (memberError) {
+      console.error('Error creating family member:', memberError)
+      // Consider cleanup if member creation fails
+    }
+
+    // Add starter to family pokedex
+    const { error: pokedexError } = await supabase
+      .from('family_pokedex')
+      .insert({
+        family_id: data.user.id,
+        pokemon_form_id: parseInt(starterPokemonFormId),
+        first_caught_at: new Date().toISOString(),
+        caught_count: 1,
+        is_favorite: true,
+        nickname: starterPokemonNickname,
+        notes: 'My first partner Pokémon!'
+      })
+
+    if (pokedexError) {
+      console.error('Error adding to pokedex:', pokedexError)
+    }
+  }
+
+  return { success: true }
+}
 
 export const signInAction = async (formData: FormData) => {
   const email = formData.get("email") as string;

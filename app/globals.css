@@ -4,58 +4,85 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --background: 210 40% 96%;
+    --foreground: 222 47% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 222 47% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --popover-foreground: 222 47% 8%;
+    --primary: 357 85% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 92%;
+    --secondary-foreground: 222 47% 8%;
+    --muted: 210 40% 92%;
+    --muted-foreground: 215 25% 35%;
+    --accent: 210 40% 92%;
+    --accent-foreground: 222 47% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 85%;
+    --input: 214 32% 85%;
+    --ring: 357 85% 60%;
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-1: 0 85% 60%;
+    --chart-2: 220 14% 35%;
+    --chart-3: 220 14% 75%;
+    --chart-4: 0 85% 75%;
+    --chart-5: 220 14% 55%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --pokemon-hp: 357 85% 60%;
+    --pokemon-attack: 25 85% 55%;
+    --pokemon-defense: 215 85% 55%;
+    --pokemon-grass: 142 76% 36%;
+    --pokemon-fire: 4 86% 58%;
+    --pokemon-water: 221 76% 60%;
+    --pokemon-electric: 48 96% 58%;
+    --pokemon-normal: 228 18% 72%;
+    --pokemon-poison: 301 64% 42%;
+    --pokemon-card-gradient: 210 40% 92%;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
+    --background: 0 0% 15%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 0 0% 18%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 0 0% 18%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
+    --primary: 50 100% 50%;
+    --primary-foreground: 0 0% 15%;
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 50 100% 50%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 50 100% 50%;
+    --accent-foreground: 0 0% 15%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+    --ring: 50 100% 50%;
+    --chart-1: 50 100% 50%;
+    --chart-2: 35 100% 45%;
+    --chart-3: 40 90% 55%;
+    --chart-4: 45 95% 60%;
+    --chart-5: 30 85% 50%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+    --pokemon-card-gradient: 220 14% 15%;
   }
 }
 
@@ -65,5 +92,146 @@
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .auto-rows-[280px] {
+    grid-auto-rows: 280px;
+  }
+  .bg-grid-white\/10 {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(255 255 255 / 0.1)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e");
+  }
+  .glass-effect {
+    @apply bg-background/30 backdrop-blur-[12px] backdrop-saturate-150;
+  }
+  
+  .glass-border {
+    @apply ring-1 ring-black/5 dark:ring-white/10;
+  }
+  
+  .glass-gradient {
+    @apply bg-gradient-to-br from-background/50 via-background/25 to-background/5;
+  }
+  
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  @media (max-width: 768px) {
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+
+  .no-horizontal-scroll {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .pokemon-type {
+    @apply px-2 py-0.5 rounded-full text-xs font-medium capitalize;
+  }
+
+  .pokemon-type-normal { @apply bg-pokemon-normal text-white; }
+  .pokemon-type-fire { @apply bg-pokemon-fire text-white; }
+  .pokemon-type-water { @apply bg-pokemon-water text-white; }
+  .pokemon-type-electric { @apply bg-pokemon-electric text-black; }
+  .pokemon-type-grass { @apply bg-pokemon-grass text-white; }
+  .pokemon-type-ice { @apply bg-pokemon-ice text-black; }
+  .pokemon-type-fighting { @apply bg-pokemon-fighting text-white; }
+  .pokemon-type-poison { @apply bg-pokemon-poison text-white; }
+  .pokemon-type-ground { @apply bg-pokemon-ground text-white; }
+  .pokemon-type-flying { @apply bg-pokemon-flying text-white; }
+  .pokemon-type-psychic { @apply bg-pokemon-psychic text-white; }
+  .pokemon-type-bug { @apply bg-pokemon-bug text-white; }
+  .pokemon-type-rock { @apply bg-pokemon-rock text-white; }
+  .pokemon-type-ghost { @apply bg-pokemon-ghost text-white; }
+  .pokemon-type-dragon { @apply bg-pokemon-dragon text-white; }
+  .pokemon-type-dark { @apply bg-pokemon-dark text-white; }
+  .pokemon-type-steel { @apply bg-pokemon-steel text-black; }
+  .pokemon-type-fairy { @apply bg-pokemon-fairy text-black; }
+
+  .pokemon-card {
+    @apply bg-pokemon-gradient shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+
+  .pokemon-stat-bar {
+    @apply h-1.5 rounded-full overflow-hidden bg-primary/20;
+  }
+
+  .pokemon-stat-value {
+    @apply h-full transition-all duration-500 ease-out;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+    opacity: 0;
+  }
+}
+
+@keyframes marquee-vertical {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) linear infinite;
+  animation-fill-mode: both;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.container {
+  @apply px-4 lg:px-8;
+}
+
+@media (max-width: 768px) {
+  input, 
+  select, 
+  textarea {
+    font-size: 16px !important;
   }
 }
