@@ -7,6 +7,16 @@ const nextConfig = {
         hostname: 'raw.githubusercontent.com',
         pathname: '/PokeAPI/sprites/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'poke-family.moodmnky.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'poke-family-gym.vercel.app',
+        pathname: '/**',
+      },
     ],
   },
 }
