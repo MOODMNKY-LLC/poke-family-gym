@@ -31,7 +31,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel"
 import { StarterCard } from "./starter-card"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { StarterPokemon } from "./starter-card"
 
 // Map of generations to their starter Pokemon IDs
@@ -58,6 +58,7 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
   const [selectedStarter, setSelectedStarter] = useState<StarterPokemon | null>(null)
   const [nickname, setNickname] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isSelecting, setIsSelecting] = useState(false)
 
   useEffect(() => {
     async function fetchStarters() {
@@ -126,9 +127,12 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
     setSelectedStarter(starter)
   }
 
-  const handleConfirmSelection = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleConfirmSelection = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
     if (selectedStarter && nickname) {
+      setIsSelecting(true)
+      // Add a small delay for the animation effect
+      await new Promise(resolve => setTimeout(resolve, 1000))
       onSelect(selectedStarter.id, nickname)
     } else {
       toast.error("Please select a starter Pokémon and provide a nickname.")
@@ -211,13 +215,27 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
             />
           </div>
 
-          <Button
-            onClick={handleConfirmSelection}
-            disabled={!nickname.trim()}
-            className="w-full"
+          <motion.div
+            animate={isSelecting ? {
+              rotate: [0, -10, 10, -10, 10, 0],
+              transition: {
+                duration: 0.5,
+                ease: "easeInOut"
+              }
+            } : {}}
           >
-            Confirm Starter Selection
-          </Button>
+            <Button
+              onClick={handleConfirmSelection}
+              disabled={!nickname.trim() || isSelecting}
+              className={`w-full transition-all duration-300 ${
+                isSelecting ? "bg-primary hover:bg-primary text-primary-foreground" : ""
+              }`}
+            >
+              {isSelecting 
+                ? `${selectedStarter?.name}, I choose you!` 
+                : "Confirm Starter Selection"}
+            </Button>
+          </motion.div>
         </motion.div>
       )}
     </div>
