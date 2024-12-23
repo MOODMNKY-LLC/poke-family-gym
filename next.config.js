@@ -17,6 +17,11 @@ const nextConfig = {
         hostname: 'poke-family-gym.vercel.app',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'poke-family-gym.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
     ],
   },
 }
