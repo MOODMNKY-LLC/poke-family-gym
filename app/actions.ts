@@ -18,7 +18,6 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
   const starterPokemonFormId = formData.get("starter_pokemon_form_id")?.toString();
   const starterPokemonNickname = formData.get("starter_pokemon_nickname")?.toString();
   const supabase = await createClient();
-  const origin = (await headers()).get("origin");
 
   if (!email || !password || !familyName || !starterPokemonFormId || !starterPokemonNickname) {
     return { error: { message: "All fields including starter Pokémon selection are required" } }
@@ -35,12 +34,11 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
     return { error: { message: "This family name is already taken. Please choose another." } }
   }
 
-  // Proceed with user creation
+  // Proceed with user creation and immediate sign in
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback`,
       data: {
         family_name: familyName,
         starter_pokemon_form_id: parseInt(starterPokemonFormId),
@@ -108,6 +106,7 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
     if (memberError) {
       console.error('Error creating family member:', memberError)
       // Consider cleanup if member creation fails
+      return { error: { message: "Failed to create family member. Please try again." } }
     }
 
     // Add starter to family pokedex
@@ -125,6 +124,18 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
 
     if (pokedexError) {
       console.error('Error adding to pokedex:', pokedexError)
+      return { error: { message: "Failed to create Pokédex entry. Please try again." } }
+    }
+
+    // Sign in the user immediately after successful signup
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError) {
+      console.error('Error signing in after signup:', signInError)
+      return { error: { message: "Account created but failed to sign in. Please try signing in manually." } }
     }
   }
 
