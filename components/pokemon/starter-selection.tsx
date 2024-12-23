@@ -190,8 +190,8 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
                 </CarouselItem>
               ))}
             </CarouselContent>
-            <CarouselPrevious />
-            <CarouselNext />
+            <CarouselPrevious type="button" />
+            <CarouselNext type="button" />
           </Carousel>
         </motion.div>
       )}

@@ -65,6 +65,7 @@ interface MemberProfileFormProps {
     starter_pokemon_move_2?: string
     starter_pokemon_move_3?: string
     starter_pokemon_move_4?: string
+    personal_motto?: string
   }
   roles?: Role[]
   onSuccess?: () => void
@@ -81,6 +82,7 @@ export function MemberProfileForm({ member, roles, onSuccess }: MemberProfileFor
   const [birthDate, setBirthDate] = useState(member.birth_date || '')
   const [favoriteColor, setFavoriteColor] = useState(member.favorite_color || '')
   const [avatarUrl, setAvatarUrl] = useState(member.avatar_url)
+  const [personalMotto, setPersonalMotto] = useState(member.personal_motto || '')
   
   // PIN management state
   const [isChangingPin, setIsChangingPin] = useState(false)
@@ -364,6 +366,7 @@ export function MemberProfileForm({ member, roles, onSuccess }: MemberProfileFor
         birth_date: birthDate || null,
         favorite_color: favoriteColor || null,
         avatar_url: avatarUrl,
+        personal_motto: personalMotto || null,
         ...(isChangingPin && { pin }),
         // Add Pokémon customization data
         ...(member.starter_pokemon_form_id && {
@@ -521,6 +524,16 @@ export function MemberProfileForm({ member, roles, onSuccess }: MemberProfileFor
                         </span>
                       </div>
                     )}
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="personalMotto">Personal Motto</Label>
+          <Input
+            id="personalMotto"
+            value={personalMotto}
+            onChange={(e) => setPersonalMotto(e.target.value)}
+            placeholder="Enter your personal motto..."
+          />
         </div>
 
                   <div className="space-y-2 md:col-span-2">

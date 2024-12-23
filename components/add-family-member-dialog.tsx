@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { StarterSelection } from "@/components/pokemon/starter-selection"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -9,14 +9,43 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { UserCircle, CircleDot } from "lucide-react"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { addFamilyMemberAction } from "@/app/actions"
+import { toast } from "sonner"
 
 export function AddFamilyMemberDialog() {
   const [starterFormId, setStarterFormId] = useState<number | null>(null)
   const [starterNickname, setStarterNickname] = useState<string>("")
   const [currentTab, setCurrentTab] = useState("info")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
-  const handleSubmit = () => {
-    // Handle form submission logic
+  const handleSubmit = async () => {
+    if (!formRef.current) return
+    setIsSubmitting(true)
+
+    try {
+      const formData = new FormData(formRef.current)
+      formData.append("starter_pokemon_form_id", starterFormId?.toString() || "")
+      formData.append("starter_pokemon_nickname", starterNickname)
+
+      const result = await addFamilyMemberAction(formData)
+      if (result.error) {
+        toast.error(result.error.message)
+        return
+      }
+
+      toast.success("Family member added successfully!")
+      // Reset form and close dialog
+      formRef.current.reset()
+      setStarterFormId(null)
+      setStarterNickname("")
+      setCurrentTab("info")
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to add family member. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -40,9 +69,9 @@ export function AddFamilyMemberDialog() {
             </TabsList>
           </div>
 
-          <form className="space-y-6">
+          <div className="space-y-6">
             <TabsContent value="info" className="p-6 pt-2">
-              <div className="space-y-4">
+              <form ref={formRef} className="space-y-4">
                 <div className="grid gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="display_name">Display Name</Label>
@@ -88,7 +117,7 @@ export function AddFamilyMemberDialog() {
                     Next: Choose Partner
                   </Button>
                 </div>
-              </div>
+              </form>
             </TabsContent>
 
             <TabsContent value="pokemon" className="p-6 pt-2">
@@ -115,14 +144,14 @@ export function AddFamilyMemberDialog() {
                   <Button 
                     type="button"
                     onClick={handleSubmit}
-                    disabled={!starterFormId || !starterNickname}
+                    disabled={!starterFormId || !starterNickname || isSubmitting}
                   >
-                    Add Family Member
+                    {isSubmitting ? "Adding..." : "Add Family Member"}
                   </Button>
                 </div>
               </div>
             </TabsContent>
-          </form>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>

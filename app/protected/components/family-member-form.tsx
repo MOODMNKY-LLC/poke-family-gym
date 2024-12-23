@@ -28,6 +28,30 @@ interface FamilyMemberFormProps {
   onSuccess?: () => void
 }
 
+interface FamilyMemberFormData {
+  display_name: string
+  full_name: string
+  birth_date: string
+  favorite_color: string
+  avatar_url: string | null
+  pin: string
+  confirmPin: string
+  role_id: number | null
+  personal_motto: string
+}
+
+const initialFormData: FamilyMemberFormData = {
+  display_name: '',
+  full_name: '',
+  birth_date: '',
+  favorite_color: '',
+  avatar_url: null,
+  pin: '',
+  confirmPin: '',
+  role_id: null,
+  personal_motto: ''
+}
+
 export function FamilyMemberForm({ familyId, roles, onSuccess }: FamilyMemberFormProps) {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
@@ -35,16 +59,7 @@ export function FamilyMemberForm({ familyId, roles, onSuccess }: FamilyMemberFor
   // Generate a temporary ID for the avatar upload
   const tempId = crypto.randomUUID()
 
-  const [formData, setFormData] = useState({
-    display_name: '',
-    full_name: '',
-    avatar_url: null as string | null,
-    birth_date: '',
-    favorite_color: '',
-    pin: '',
-    confirmPin: '',
-    role_id: 1 // Default to Trainer role
-  })
+  const [formData, setFormData] = useState(initialFormData)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -88,16 +103,7 @@ export function FamilyMemberForm({ familyId, roles, onSuccess }: FamilyMemberFor
       onSuccess?.()
       
       // Reset form
-      setFormData({
-        display_name: '',
-        full_name: '',
-        avatar_url: null,
-        birth_date: '',
-        favorite_color: '',
-        pin: '',
-        confirmPin: '',
-        role_id: 1
-      })
+      setFormData(initialFormData)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error adding family member')
       console.error('Error details:', error)
@@ -120,7 +126,32 @@ export function FamilyMemberForm({ familyId, roles, onSuccess }: FamilyMemberFor
             }))}
           />
         </div>
-        {/* Rest of the form fields */}
+        <div className="space-y-2">
+          <Label htmlFor="favoriteColor">Favorite Color</Label>
+          <Input
+            type="color"
+            id="favoriteColor"
+            value={formData.favorite_color || '#000000'}
+            onChange={(e) => setFormData(prev => ({ 
+              ...prev, 
+              favorite_color: e.target.value 
+            }))}
+            className="h-10 w-20 p-1 cursor-pointer"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="personalMotto">Personal Motto</Label>
+          <Input
+            id="personalMotto"
+            value={formData.personal_motto}
+            onChange={(e) => setFormData(prev => ({ 
+              ...prev, 
+              personal_motto: e.target.value 
+            }))}
+            placeholder="Enter your personal motto..."
+          />
+        </div>
       </div>
     </form>
   )

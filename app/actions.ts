@@ -235,3 +235,113 @@ export const signOutAction = async () => {
   await supabase.auth.signOut();
   return redirect("/sign-in");
 };
+
+interface AddFamilyMemberResponse {
+  error?: { message: string }
+  success?: boolean
+}
+
+export const addFamilyMemberAction = async (formData: FormData): Promise<AddFamilyMemberResponse> => {
+  const displayName = formData.get("display_name")?.toString()
+  const fullName = formData.get("full_name")?.toString()
+  const pin = formData.get("pin")?.toString()
+  const starterPokemonFormId = formData.get("starter_pokemon_form_id")?.toString()
+  const starterPokemonNickname = formData.get("starter_pokemon_nickname")?.toString()
+  const supabase = await createClient()
+
+  if (!displayName || !fullName || !pin || !starterPokemonFormId || !starterPokemonNickname) {
+    return { error: { message: "All fields including starter Pokémon selection are required" } }
+  }
+
+  // Get the current user's family ID
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: { message: "Not authenticated" } }
+  }
+
+  // Create the family member
+  const { error: memberError } = await supabase
+    .from('family_members')
+    .insert({
+      family_id: user.id,
+      display_name: displayName,
+      full_name: fullName,
+      role_id: 2, // Regular member role
+      current_status: 'offline',
+      starter_pokemon_form_id: parseInt(starterPokemonFormId),
+      starter_pokemon_nickname: starterPokemonNickname,
+      starter_pokemon_obtained_at: new Date().toISOString(),
+      pin
+    })
+
+  if (memberError) {
+    console.error('Error creating family member:', memberError)
+    return { error: { message: "Failed to create family member. Please try again." } }
+  }
+
+  // Add starter to family pokedex
+  const { error: pokedexError } = await supabase
+    .from('family_pokedex')
+    .insert({
+      family_id: user.id,
+      pokemon_form_id: parseInt(starterPokemonFormId),
+      first_caught_at: new Date().toISOString(),
+      caught_count: 1,
+      is_favorite: true,
+      nickname: starterPokemonNickname,
+      notes: 'A new partner Pokémon!'
+    })
+
+  if (pokedexError) {
+    console.error('Error adding to pokedex:', pokedexError)
+    return { error: { message: "Failed to create Pokédex entry. Please try again." } }
+  }
+
+  return { success: true }
+}
+
+interface DeleteProfileResponse {
+  error?: { message: string }
+  success?: boolean
+}
+
+export const deleteProfileAction = async (memberId: string): Promise<DeleteProfileResponse> => {
+  const supabase = await createClient()
+
+  // Get the current user's family ID
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { error: { message: "Not authenticated" } }
+  }
+
+  // First verify that the member belongs to the current family
+  const { data: member, error: memberError } = await supabase
+    .from('family_members')
+    .select('id, role_id')
+    .eq('id', memberId)
+    .eq('family_id', user.id)
+    .single()
+
+  if (memberError || !member) {
+    return { error: { message: "Member not found or you don't have permission to delete them" } }
+  }
+
+  // Don't allow deleting the admin
+  if (member.role_id === 1) {
+    return { error: { message: "Cannot delete the family admin" } }
+  }
+
+  // Delete the member - this will cascade to related records due to our FK constraints
+  const { error: deleteError } = await supabase
+    .from('family_members')
+    .delete()
+    .eq('id', memberId)
+    .eq('family_id', user.id)
+
+  if (deleteError) {
+    console.error('Error deleting member:', deleteError)
+    return { error: { message: "Failed to delete member. Please try again." } }
+  }
+
+  return { success: true }
+}

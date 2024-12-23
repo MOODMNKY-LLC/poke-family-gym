@@ -44,15 +44,27 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
     full_name?: string
     pin?: string
     confirmPin?: string
+    personal_motto?: string
   }>({})
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    display_name: string
+    full_name: string
+    avatar_url: string | null
+    pin: string
+    confirmPin: string
+    role_id: string
+    personal_motto: string
+    starter_pokemon_form_id: number | null
+    starter_pokemon_nickname: string
+  }>({
     display_name: '',
     full_name: '',
-    avatar_url: null as string | null,
+    avatar_url: null,
     pin: '',
     confirmPin: '',
-    role_id: '2', // Default to child role
-    starter_pokemon_form_id: null as number | null,
+    role_id: '2', // Default to parent role
+    personal_motto: '',
+    starter_pokemon_form_id: null,
     starter_pokemon_nickname: ''
   })
 
@@ -99,6 +111,13 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
           }
         }
         break
+      case 'personal_motto':
+        if (!value || value.length < 2) {
+          newErrors.personal_motto = 'Personal motto must be at least 2 characters long'
+        } else {
+          delete newErrors.personal_motto
+        }
+        break
     }
 
     setErrors(newErrors)
@@ -122,79 +141,73 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
     validateField(name, processedValue)
   }
 
+  // Reset form and tab
+  const resetForm = () => {
+    setFormData({
+      display_name: '',
+      full_name: '',
+      avatar_url: null,
+      pin: '',
+      confirmPin: '',
+      role_id: '2',
+      personal_motto: '',
+      starter_pokemon_form_id: null,
+      starter_pokemon_nickname: ''
+    })
+    setErrors({})
+    setCurrentTab("info")
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+    setLoading(true)
+
     try {
-      // Validate all fields before submission
-      validateField('display_name', formData.display_name)
-      validateField('full_name', formData.full_name)
-      if (formData.role_id !== '1') {
-        validateField('pin', formData.pin)
-        validateField('confirmPin', formData.confirmPin)
+      // Validate required fields
+      const newErrors: Record<string, string> = {}
+      
+      if (!formData.display_name) {
+        newErrors.display_name = 'Display name is required'
+      }
+      
+      if (!formData.full_name) {
+        newErrors.full_name = 'Full name is required'
+      }
+      
+      if (formData.role_id !== '1' && !formData.pin) {
+        newErrors.pin = 'PIN is required for non-admin roles'
+      }
+      
+      if (formData.role_id !== '1' && formData.pin !== formData.confirmPin) {
+        newErrors.confirmPin = 'PINs do not match'
       }
 
-      // Check if there are any errors
-      if (Object.keys(errors).length > 0) {
-        return // Don't proceed if there are validation errors
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors)
+        return
       }
 
-      setLoading(true)
-
-      // Generate a unique ID for the new member
-      const memberId = crypto.randomUUID()
-
+      // Insert the new family member
       const { error } = await supabase
         .from('family_members')
         .insert({
-          id: memberId,
           family_id: familyId,
           display_name: formData.display_name,
           full_name: formData.full_name,
           avatar_url: formData.avatar_url,
-          pin: formData.role_id !== '1' ? formData.pin : null,
+          pin: formData.pin || null,
           role_id: parseInt(formData.role_id),
-          current_status: 'active',
+          personal_motto: formData.personal_motto || null,
           starter_pokemon_form_id: formData.starter_pokemon_form_id,
-          starter_pokemon_nickname: formData.starter_pokemon_nickname
+          starter_pokemon_nickname: formData.starter_pokemon_nickname || null
         })
 
       if (error) throw error
 
-      // If a starter was selected, add it to the family Pokédex
-      if (formData.starter_pokemon_form_id) {
-        const { error: pokedexError } = await supabase
-          .from('family_pokedex')
-          .insert({
-            family_id: familyId,
-            pokemon_form_id: formData.starter_pokemon_form_id,
-            first_caught_at: new Date().toISOString(),
-            caught_count: 1,
-            is_favorite: true,
-            nickname: formData.starter_pokemon_nickname,
-            notes: `${formData.display_name}'s partner Pokémon`
-          })
-
-        if (pokedexError) throw pokedexError
-      }
-
       toast.success('Family member added successfully!')
       setOpen(false)
-      onSuccess?.()
-      
-      // Reset form and tab
-      setFormData({
-        display_name: '',
-        full_name: '',
-        avatar_url: null,
-        pin: '',
-        confirmPin: '',
-        role_id: '2',
-        starter_pokemon_form_id: null,
-        starter_pokemon_nickname: ''
-      })
-      setErrors({})
-      setCurrentTab("info")
+      resetForm()
+      window.location.reload()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error adding family member')
       console.error('Error details:', error)
@@ -290,9 +303,30 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
                     )}
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="personal_motto">
+                      Personal Motto <span className="text-xs text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Input
+                      id="personal_motto"
+                      name="personal_motto"
+                      value={formData.personal_motto}
+                      onChange={handleInputChange}
+                      placeholder="Gotta catch 'em all!"
+                      className={errors.personal_motto ? "border-red-500" : ""}
+                    />
+                    {errors.personal_motto && (
+                      <p id="personal_motto_error" className="text-sm text-red-500">
+                        {errors.personal_motto}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Role Selection */}
                   <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
+                    <Label htmlFor="role_id">
+                      Role <span className="text-red-500">*</span>
+                    </Label>
                     <Select
                       value={formData.role_id}
                       onValueChange={(value) => {

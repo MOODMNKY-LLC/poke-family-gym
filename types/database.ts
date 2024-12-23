@@ -7,6 +7,7 @@ interface FamilyMember {
   starter_pokemon_form_id: number | null
   starter_pokemon_nickname: string | null
   starter_pokemon_obtained_at: string | null
+  personal_motto: string | null
   // ... other fields
 }
 

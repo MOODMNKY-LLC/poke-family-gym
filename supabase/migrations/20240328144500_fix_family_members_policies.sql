@@ -1,6 +1,6 @@
--- Migration: Fix Delete Member Policy
--- Description: Fix the policy for deleting family members to properly handle admin and non-admin cases
--- Author: MOODMNKY LLC
+-- Migration: Fix Family Members Policies
+-- Description: Fix the policies for family members to properly handle admin and non-admin cases
+-- Author: CODE MNKY
 
 begin;
 
@@ -8,7 +8,6 @@ begin;
 drop policy if exists "Users can delete family members" on family_members;
 drop policy if exists "Allow admin to delete non-admin members" on family_members;
 drop policy if exists "allow_admin_delete_non_admin_members" on family_members;
-drop policy if exists "Admins can delete non-admin members of their family" on family_members;
 
 -- Create new delete policy with a simpler approach
 create policy "Admins can delete non-admin members of their family"

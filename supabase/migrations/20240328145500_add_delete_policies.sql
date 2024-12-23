@@ -1,6 +1,6 @@
 -- Migration: Add Delete Policies
 -- Description: Add policies for deleting family members and cascade rules
--- Author: MOODMNKY LLC
+-- Author: CODE MNKY
 
 begin;
 
