@@ -62,14 +62,18 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
       await new Promise(resolve => setTimeout(resolve, 1000))
 
       // First check if a profile already exists for this user
-      const { data: existingUserProfile } = await supabase
+      const { data: existingUserProfile, error: checkError } = await supabase
         .from('family_profiles')
         .select('id')
         .eq('id', data.user.id)
         .single()
 
+      if (checkError) {
+        console.error('Error checking existing profile:', checkError.code, checkError.message, checkError.details)
+      }
+
       if (existingUserProfile) {
-        console.log('Profile already exists for user')
+        console.log('Profile already exists for user:', existingUserProfile)
         return { success: true }
       }
 
@@ -87,7 +91,12 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
         })
 
       if (profileError) {
-        console.error('Failed to create family profile:', profileError.code, profileError.message, profileError.details)
+        console.error('Failed to create family profile:', {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint
+        })
         
         // If profile creation fails, we should clean up the auth user
         const { error: deleteError } = await supabase.auth.admin.deleteUser(data.user.id)
@@ -95,7 +104,7 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
           console.error('Failed to clean up auth user:', deleteError.message)
         }
         
-        return { error: { message: "Failed to create family profile. Please try again." } }
+        return { error: { message: `Failed to create family profile: ${profileError.message}` } }
       }
 
       // Create initial admin family member with starter pokemon and PIN
@@ -114,9 +123,13 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
         })
 
       if (memberError) {
-        console.error('Error creating family member:', memberError.code, memberError.message, memberError.details)
-        // Consider cleanup if member creation fails
-        return { error: { message: "Failed to create family member. Please try again." } }
+        console.error('Error creating family member:', {
+          code: memberError.code,
+          message: memberError.message,
+          details: memberError.details,
+          hint: memberError.hint
+        })
+        return { error: { message: `Failed to create family member: ${memberError.message}` } }
       }
 
       // Add starter to family pokedex
@@ -133,8 +146,16 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
         })
 
       if (pokedexError) {
-        console.error('Error adding to pokedex:', pokedexError.code, pokedexError.message, pokedexError.details)
+        console.error('Error adding to pokedex:', {
+          code: pokedexError.code,
+          message: pokedexError.message,
+          details: pokedexError.details,
+          hint: pokedexError.hint
+        })
       }
+
+      console.log('Successfully created family profile and member')
+      return { success: true }
     }
 
     return { success: true }
