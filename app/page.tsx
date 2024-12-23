@@ -187,43 +187,43 @@ export default function Home() {
   const features = [
     {
       icon: Trophy,
-      title: "Family Gym Challenges",
-      description: "Turn daily tasks into exciting gym battles. Complete challenges to earn badges and Pokéballs"
+      title: "Family Gym Badges",
+      description: "Turn daily tasks into Gym Badge challenges! Earn Poké Balls and power up with victory streaks! ✨"
     },
     {
       icon: Users,
-      title: "Train Together",
-      description: "Each family member becomes a trainer with their own partner Pokémon and unique responsibilities"
+      title: "Team Family Power",
+      description: "Parents become Gym Leaders, kids become Trainers! Team up for special family combo moves and grow stronger together! 🌟"
     },
     {
       icon: Swords,
-      title: "Build Your Collection",
-      description: "Use earned Pokéballs to unlock new Pokémon and expand your family's Pokédex"
+      title: "Mystery PokéPacks",
+      description: "Use Poké Balls to discover mystery Pokémon! Trade with family members and unlock special surprises! 🎁"
     },
     {
       icon: GraduationCap,
-      title: "Become a Champion",
-      description: "Level up your family's achievements and work together to become the ultimate Pokémon family"
+      title: "Trainer Achievements",
+      description: "Level up with titles like 'Ace Trainer' and 'Family Champion'! Complete your Family Pokédex and become legendary! 🏆"
     }
   ]
 
   const workflowSteps = [
     {
       step: "1",
-      title: "Register Your Gym",
-      description: "Create your family gym and invite members to join your training team",
+      title: "Power Up Your Gym",
+      description: "Create your Family Gym, invite your team, and prepare for an amazing adventure! 🏰",
       icon: Users,
     },
     {
       step: "2",
-      title: "Choose Partners",
-      description: "Each family member selects their starter Pokémon companion",
+      title: "Meet Your Pokémon",
+      description: "Choose your special Pokémon friend from different regions and start your journey together! ⭐",
       icon: Star,
     },
     {
       step: "3",
-      title: "Complete Challenges",
-      description: "Earn Pokéballs and badges through daily achievements",
+      title: "Start Your Quest",
+      description: "Complete challenges, earn rewards, and fill your Family Pokédex with treasures! 🌈",
       icon: Sparkles,
     },
   ]
@@ -273,16 +273,16 @@ export default function Home() {
               <div className="flex flex-col gap-4 mb-6 lg:mb-8">
                 <Badge 
                   variant="outline" 
-                  className="w-fit text-sm lg:text-base px-3 lg:px-4 py-1 border-primary/20"
+                  className="w-fit text-sm lg:text-base px-3 lg:px-4 py-1 border-primary/20 animate-pulse"
                 >
-                  Now Accepting New Trainers
+                  New Trainer Registration Open! • Special Starter Pokémon Bonus ⭐
                 </Badge>
                 <div className="space-y-2">
                   <h2 className="text-lg lg:text-xl font-medium text-primary">
                     Welcome to
                   </h2>
                   <h1 className="text-3xl lg:text-5xl xl:text-7xl font-bold tracking-tighter">
-                    The Poké Family
+                    The Family Poké
                     <br />
                     <span className="text-primary relative inline-flex items-center gap-2 lg:gap-4">
                       Gym
@@ -291,6 +291,9 @@ export default function Home() {
                       />
                     </span>
                   </h1>
+                  <p className="text-lg text-muted-foreground max-w-[600px] mt-4">
+                    Transform daily tasks into Pokémon adventures! Earn rewards, collect Pokémon, and grow together! ✨
+                  </p>
                 </div>
               </div>
 
@@ -318,7 +321,7 @@ export default function Home() {
                   className="w-full sm:w-auto gap-2 text-base lg:text-lg px-6 lg:px-8 py-5 lg:py-6"
                 >
                   <Link href="/pokedex">
-                    View Pokédex
+                    Browse Pokédex
                     <PokeBall className="ml-2 h-4 w-4 lg:h-5 lg:w-5" />
                   </Link>
                 </Button>
@@ -473,13 +476,14 @@ export default function Home() {
         <div className="container py-20">
           <div className="text-center mb-12">
             <Badge variant="outline" className="mb-4">
-              Your Family's Journey
+              Your Epic Family Quest Begins
             </Badge>
             <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-              Become a Legendary Family
+              Become the Ultimate Family Team
             </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-[700px] mx-auto">
-              Follow these steps to start your family's Pokémon adventure
+              Join families discovering the magic in everyday moments! 
+              Catch Pokémon, earn rewards, and create memories together! ✨
             </p>
           </div>
 
@@ -516,21 +520,26 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10" />
           <div className="relative">
             <Badge className="mb-4" variant="outline">
-              Begin Your Legacy
+              Special Welcome Bonus
             </Badge>
             <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl mb-4">
-              Open Your Family Gym Today
+              Ready to Be a Family Gym Leader?
             </h2>
-            <p className="text-lg text-muted-foreground mb-8 max-w-[600px] mx-auto">
-              Join other families who are turning everyday moments into epic Pokémon adventures. 
-              Start collecting, training, and growing together!
+            <p className="text-lg text-muted-foreground mb-8 max-w-[700px] mx-auto">
+              Start your adventure with a special welcome pack! Choose your partner Pokémon 
+              and join amazing families on this magical journey! ✨
             </p>
-            <Button asChild size="lg" className="gap-2">
-              <Link href="/sign-up">
-                Register Your Gym
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Button asChild size="lg" className="gap-2">
+                <Link href="/sign-up">
+                  Start Your Journey
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Free to join • Start your adventure today!
+              </span>
+            </div>
           </div>
         </Card>
       </section>

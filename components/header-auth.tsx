@@ -69,7 +69,7 @@ export default async function AuthButton() {
   return user ? (
     <div className="flex items-center gap-4">
       <span className="text-sm text-muted-foreground">
-        Hey, {familyProfile?.data?.family_name || user.email}!
+        Welcome to {familyProfile?.data?.family_name || "The Family Poké Gym"}!
       </span>
       
       <div className="flex items-center gap-2">

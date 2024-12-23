@@ -204,14 +204,14 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
         >
           <div className="space-y-2">
             <Label htmlFor="nickname">
-              Nickname for {selectedStarter.name}
+              Nickname for {selectedStarter.name.charAt(0).toUpperCase() + selectedStarter.name.slice(1)}
             </Label>
             <Input
               id="nickname"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               maxLength={12}
-              placeholder={`Give ${selectedStarter.name} a nickname`}
+              placeholder={`Give ${selectedStarter.name.charAt(0).toUpperCase() + selectedStarter.name.slice(1)} a nickname`}
             />
           </div>
 
@@ -232,7 +232,7 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
               }`}
             >
               {isSelecting 
-                ? `${selectedStarter?.name}, I choose you!` 
+                ? `${selectedStarter.name.charAt(0).toUpperCase() + selectedStarter.name.slice(1)}, I choose you!` 
                 : "Confirm Starter Selection"}
             </Button>
           </motion.div>

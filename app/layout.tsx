@@ -15,8 +15,8 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
-  title: "The Poke Warrior App",
-  description: "Turn family management into team building and a trainers dream!",
+  title: "The Family Poké Gym",
+  description: "Turn family management into a Pokémon adventure with tasks, rewards, and collecting!",
 };
 
 export const viewport = {
@@ -51,7 +51,7 @@ export default function RootLayout({
               <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
                 <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
                   <div className="flex gap-5 items-center font-semibold">
-                    <Link href={"/"}>The Poke Warrior App</Link>
+                    <Link href={"/"}>The Family Poké Gym</Link>
                     <Link 
                       href={"/pokedex"} 
                       className="text-sm font-medium transition-colors hover:text-primary"

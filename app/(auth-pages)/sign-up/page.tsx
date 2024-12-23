@@ -115,7 +115,7 @@ export default function Signup() {
                 name="family_name"
                 value={formData.familyName}
                 onChange={(e) => setFormData({ ...formData, familyName: e.target.value })}
-                placeholder="The Ketchum Gym"
+                placeholder="The Smith Family Poké Gym"
                 minLength={2}
                 required
               />

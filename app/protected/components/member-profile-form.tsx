@@ -39,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { DeleteMemberDialog } from "./delete-member-dialog"
 import { DeleteFamilyDialog } from "./delete-family-dialog"
 import { Role } from '@/types/types'
+import { DatePicker } from "@/components/ui/date-picker"
 
 interface MemberProfileFormProps {
   member: {
@@ -498,11 +499,9 @@ export function MemberProfileForm({ member, roles, onSuccess }: MemberProfileFor
 
         <div className="space-y-2">
                     <Label htmlFor="birthDate">Birth Date</Label>
-          <Input
-            type="date"
-                      id="birthDate"
-                      value={birthDate}
-                      onChange={(e) => setBirthDate(e.target.value)}
+          <DatePicker
+            date={birthDate ? new Date(birthDate) : undefined}
+            onSelect={(date) => setBirthDate(date ? date.toISOString().split('T')[0] : '')}
           />
         </div>
 
