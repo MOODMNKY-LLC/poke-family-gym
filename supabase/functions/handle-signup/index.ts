@@ -1,5 +1,4 @@
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from './deps.ts'
 
 interface WebhookPayload {
   type: 'EMAIL_CONFIRM' | 'EMAIL_CHANGE' | string
@@ -17,7 +16,7 @@ interface WebhookPayload {
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
