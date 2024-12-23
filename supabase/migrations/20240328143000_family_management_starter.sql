@@ -91,7 +91,7 @@ drop policy if exists "Users can update their own family profile" on family_prof
 drop policy if exists "Users can insert their own family profile" on family_profiles;
 drop policy if exists "Users can view their family members" on family_members;
 drop policy if exists "Users can create family members" on family_members;
-drop policy if exists "Users can update their family members" on family_members;
+drop policy if exists "Users can update family members" on family_members;
 drop policy if exists "Roles are viewable by everyone" on roles;
 drop policy if exists "Avatar images are publicly accessible" on storage.objects;
 drop policy if exists "Users can upload avatars" on storage.objects;
@@ -112,37 +112,43 @@ create policy "Users can update their own family profile"
 
 -- Family Members policies
 create policy "Users can view family members"
-  on family_members for select
-  using (
-    exists (
-      select 1
-      from family_profiles
-      where id = family_members.family_id
-      and id = auth.uid()
-    )
-  );
+on family_members
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from family_profiles
+    where family_profiles.id = family_members.family_id
+    and family_profiles.id = auth.uid()
+  )
+);
 
 create policy "Users can create family members"
-  on family_members for insert
-  with check (
-    exists (
-      select 1
-      from family_profiles
-      where id = family_members.family_id
-      and id = auth.uid()
-    )
-  );
+on family_members
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from family_profiles
+    where family_profiles.id = family_members.family_id
+    and family_profiles.id = auth.uid()
+  )
+);
 
 create policy "Users can update family members"
-  on family_members for update
-  using (
-    exists (
-      select 1
-      from family_profiles
-      where id = family_members.family_id
-      and id = auth.uid()
-    )
-  );
+on family_members
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from family_profiles
+    where family_profiles.id = family_members.family_id
+    and family_profiles.id = auth.uid()
+  )
+);
 
 -- Roles policies (public reference data)
 create policy "Roles are viewable by everyone"
@@ -185,11 +191,15 @@ begin
   starter_pokemon_id := (new.raw_user_meta_data->>'starter_pokemon_form_id')::bigint;
   starter_nickname := new.raw_user_meta_data->>'starter_pokemon_nickname';
   
-  -- Create family profile
+  -- Insert family profile with conflict handling
   insert into family_profiles (id, family_name)
-  values (new.id, coalesce(new.raw_user_meta_data->>'family_name', 'New Family'));
+  values (
+    new.id, 
+    coalesce(new.raw_user_meta_data->>'family_name', 'New Family')
+  )
+  on conflict (id) do nothing;
   
-  -- Create initial admin family member with starter pokemon
+  -- Insert family member with conflict handling
   insert into family_members (
     id,
     family_id,
@@ -209,9 +219,10 @@ begin
     starter_pokemon_id,
     starter_nickname,
     case when starter_pokemon_id is not null then now() else null end
-  );
+  )
+  on conflict (id) do nothing;
   
-  -- If starter pokemon was selected, add it to family_pokedex
+  -- Add starter to pokedex with conflict handling
   if starter_pokemon_id is not null then
     insert into family_pokedex (
       family_id,
@@ -229,7 +240,8 @@ begin
       true,
       starter_nickname,
       'My first partner Pokémon!'
-    );
+    )
+    on conflict (family_id, pokemon_form_id) do nothing;
   end if;
   
   return new;
@@ -307,3 +319,11 @@ create table family_pokedex (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Add unique constraints if not already present
+alter table family_members
+  add constraint unique_family_member_id unique (id),
+  add constraint unique_family_member_per_family unique (family_id, display_name);
+
+alter table family_pokedex
+  add constraint unique_pokemon_per_family unique (family_id, pokemon_form_id);

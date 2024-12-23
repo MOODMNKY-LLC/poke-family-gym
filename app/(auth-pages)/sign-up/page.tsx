@@ -21,6 +21,7 @@ export default function Signup() {
     familyName: "",
     pin: ""
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleNext = () => {
     if (step === 1 && (!formData.email || !formData.password || !formData.familyName)) {
@@ -50,15 +51,23 @@ export default function Signup() {
       data.append('starter_pokemon_nickname', starterNickname)
       data.append('pin', formData.pin)
 
+      setIsSubmitting(true)
+
       const response = await signUpAction(data)
       if (response.error) {
-        toast.error(response.error.message)
+        if (response.error.message.includes('Profile already exists')) {
+          toast.error("An account with this email already exists.")
+        } else {
+          toast.error(response.error.message)
+        }
       } else {
         toast.success("Sign up successful! Please check your email for a verification link.")
       }
     } catch (error) {
       toast.error("An error occurred during sign-up. Please try again.")
       console.error("Sign-up error:", error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -173,10 +182,20 @@ export default function Signup() {
           className="space-y-4"
         >
           <h1 className="text-3xl font-bold text-primary">Confirm and Sign Up</h1>
-          <p className="text-muted-foreground">Review your information and click Sign Up to complete the process.</p>
+          <p className="text-muted-foreground">
+            Review your information and click Sign Up to complete the process.
+          </p>
           <div className="flex justify-between">
-            <InteractiveHoverButton text="Back" onClick={handleBack} />
-            <InteractiveHoverButton text="Sign Up" onClick={handleSubmit} />
+            <InteractiveHoverButton 
+              text="Back" 
+              onClick={handleBack}
+              disabled={isSubmitting} 
+            />
+            <InteractiveHoverButton 
+              text={isSubmitting ? "Signing Up..." : "Sign Up"}
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+            />
           </div>
         </motion.div>
       )}

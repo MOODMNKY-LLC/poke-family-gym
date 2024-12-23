@@ -6,11 +6,16 @@ import { Metadata } from "next"
 import { Button } from "@/components/ui/button"
 import { Pencil } from "lucide-react"
 import Link from "next/link"
+import { PokemonClient } from 'pokenode-ts'
+import { PokemonSpriteImage } from '@/components/pokemon/pokemon-sprite-image'
 
 type PageProps = {
   params: Promise<{ id: string }>
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
+
+// Create a singleton Pokemon client
+const pokeClient = new PokemonClient()
 
 export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { id } = await params
@@ -34,7 +39,6 @@ export default async function TrainerProfilePage({
   searchParams 
 }: PageProps) {
   const { id } = await params
-  const query = await searchParams
   const supabase = await createClient()
 
   // Fetch the family member details with role info
@@ -49,8 +53,10 @@ export default async function TrainerProfilePage({
       starter_pokemon: pokemon_forms!starter_pokemon_form_id (
         id,
         name,
+        species_id,
         pokemon_species (
-          name
+          name,
+          id
         )
       )
     `)
@@ -70,6 +76,23 @@ export default async function TrainerProfilePage({
       .getPublicUrl(member.avatar_url)
     avatarUrl = data.publicUrl
   }
+
+  // Fetch additional Pokemon data from PokeAPI if we have a starter
+  let pokemonDetails = null
+  if (member.starter_pokemon?.pokemon_species?.id) {
+    try {
+      pokemonDetails = await pokeClient.getPokemonById(
+        member.starter_pokemon.pokemon_species.id
+      )
+    } catch (error) {
+      console.error('Error fetching Pokemon details:', error)
+    }
+  }
+
+  // Get the sprite URL with fallback
+  const spriteUrl = pokemonDetails?.sprites?.front_default || 
+                   pokemonDetails?.sprites?.front_shiny ||
+                   `/fallback-pokemon.png`
 
   return (
     <div className="flex-1 p-8">
@@ -100,20 +123,31 @@ export default async function TrainerProfilePage({
             </Button>
           </div>
 
-          {member.starter_pokemon && (
+          {member.starter_pokemon && pokemonDetails && (
             <div className="mt-6 p-4 border rounded-lg">
               <h2 className="text-lg font-semibold">Partner Pokémon</h2>
               <div className="flex items-center gap-4">
-                <img 
-                  src={`/pokemon/${member.starter_pokemon.pokemon_species.name}.png`}
-                  alt={member.starter_pokemon.name}
-                  className="w-16 h-16"
+                <PokemonSpriteImage 
+                  src={spriteUrl}
+                  alt={member.starter_pokemon.pokemon_species.name || 'Pokemon'}
                 />
                 <div>
-                  <p className="font-medium">{member.starter_pokemon_nickname}</p>
+                  <p className="font-medium">
+                    {member.starter_pokemon_nickname || 'Unnamed Partner'}
+                  </p>
                   <p className="text-sm text-muted-foreground capitalize">
                     {member.starter_pokemon.pokemon_species.name}
                   </p>
+                  <div className="flex gap-2 mt-1">
+                    {pokemonDetails.types.map((type) => (
+                      <span 
+                        key={type.type.name}
+                        className={`px-2 py-1 rounded text-xs pokemon-type-${type.type.name}`}
+                      >
+                        {type.type.name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

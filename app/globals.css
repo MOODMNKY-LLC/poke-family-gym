@@ -4,85 +4,48 @@
 
 @layer base {
   :root {
-    --background: 210 40% 96%;
-    --foreground: 222 47% 8%;
+    --background: 0 0% 100%;
+    --foreground: 20 14.3% 4.1%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 8%;
+    --card-foreground: 20 14.3% 4.1%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 8%;
-    --primary: 357 85% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 92%;
-    --secondary-foreground: 222 47% 8%;
-    --muted: 210 40% 92%;
-    --muted-foreground: 215 25% 35%;
-    --accent: 210 40% 92%;
-    --accent-foreground: 222 47% 8%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 85%;
-    --input: 214 32% 85%;
-    --ring: 357 85% 60%;
+    --popover-foreground: 20 14.3% 4.1%;
+    --primary: 0 72.2% 50.6%;
+    --primary-foreground: 60 9.1% 97.8%;
+    --secondary: 60 4.8% 95.9%;
+    --secondary-foreground: 24 9.8% 10%;
+    --muted: 60 4.8% 95.9%;
+    --muted-foreground: 25 5.3% 44.7%;
+    --accent: 60 4.8% 95.9%;
+    --accent-foreground: 24 9.8% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 0 72.2% 50.6%;
     --radius: 0.5rem;
-    --chart-1: 0 85% 60%;
-    --chart-2: 220 14% 35%;
-    --chart-3: 220 14% 75%;
-    --chart-4: 0 85% 75%;
-    --chart-5: 220 14% 55%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --pokemon-hp: 357 85% 60%;
-    --pokemon-attack: 25 85% 55%;
-    --pokemon-defense: 215 85% 55%;
-    --pokemon-grass: 142 76% 36%;
-    --pokemon-fire: 4 86% 58%;
-    --pokemon-water: 221 76% 60%;
-    --pokemon-electric: 48 96% 58%;
-    --pokemon-normal: 228 18% 72%;
-    --pokemon-poison: 301 64% 42%;
-    --pokemon-card-gradient: 210 40% 92%;
   }
 
   .dark {
-    --background: 0 0% 15%;
+    --background: 240 10% 4%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 18%;
+    --card: 240 10% 4%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 18%;
+    --popover: 240 10% 4%;
     --popover-foreground: 0 0% 98%;
-    --primary: 50 100% 50%;
-    --primary-foreground: 0 0% 15%;
-    --secondary: 0 0% 20%;
-    --secondary-foreground: 50 100% 50%;
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 70%;
-    --accent: 50 100% 50%;
-    --accent-foreground: 0 0% 15%;
-    --destructive: 0 62.8% 30.6%;
+    --primary: 47.9 95.8% 53.1%;
+    --primary-foreground: 26 83.3% 14.1%;
+    --secondary: 240 5% 8%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 5% 8%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 5% 8%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 25%;
-    --input: 0 0% 25%;
-    --ring: 50 100% 50%;
-    --chart-1: 50 100% 50%;
-    --chart-2: 35 100% 45%;
-    --chart-3: 40 90% 55%;
-    --chart-4: 45 95% 60%;
-    --chart-5: 30 85% 50%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --pokemon-card-gradient: 220 14% 15%;
+    --border: 240 5% 12%;
+    --input: 240 5% 12%;
+    --ring: 47.9 95.8% 53.1%;
   }
 }
 
@@ -97,14 +60,8 @@
 }
 
 @layer utilities {
-  .auto-rows-[280px] {
-    grid-auto-rows: 280px;
-  }
-  .bg-grid-white\/10 {
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(255 255 255 / 0.1)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e");
-  }
   .glass-effect {
-    @apply bg-background/30 backdrop-blur-[12px] backdrop-saturate-150;
+    @apply bg-background/30 backdrop-blur-[12px] backdrop-saturate-150 dark:bg-background/40 dark:backdrop-blur-[16px] dark:backdrop-saturate-[180%];
   }
   
   .glass-border {
@@ -112,9 +69,13 @@
   }
   
   .glass-gradient {
-    @apply bg-gradient-to-br from-background/50 via-background/25 to-background/5;
+    @apply bg-gradient-to-br from-background/50 via-background/25 to-background/5 dark:from-background/60 dark:via-background/30 dark:to-background/10;
   }
   
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-xl dark:bg-black/20 dark:border-white/10;
+  }
+
   .perspective-1000 {
     perspective: 1000px;
   }
@@ -131,24 +92,8 @@
     transform: rotateY(180deg);
   }
 
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  @media (max-width: 768px) {
-    .touch-target {
-      min-height: 44px;
-      min-width: 44px;
-    }
-  }
-
-  .no-horizontal-scroll {
-    max-width: 100vw;
-    overflow-x: hidden;
+  .pixelated {
+    image-rendering: pixelated;
   }
 }
 
@@ -175,18 +120,6 @@
   .pokemon-type-dark { @apply bg-pokemon-dark text-white; }
   .pokemon-type-steel { @apply bg-pokemon-steel text-black; }
   .pokemon-type-fairy { @apply bg-pokemon-fairy text-black; }
-
-  .pokemon-card {
-    @apply bg-pokemon-gradient shadow-lg hover:shadow-xl transition-all duration-300;
-  }
-
-  .pokemon-stat-bar {
-    @apply h-1.5 rounded-full overflow-hidden bg-primary/20;
-  }
-
-  .pokemon-stat-value {
-    @apply h-full transition-all duration-500 ease-out;
-  }
 }
 
 @keyframes marquee {

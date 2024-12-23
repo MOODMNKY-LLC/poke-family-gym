@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { GlassCard } from "@/components/ui/glass-card"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
+import { getAvatarUrl } from '@/utils/get-avatar-url'
 
 interface FamilyProfile {
   family_name: string
@@ -151,7 +152,7 @@ export default function AccountForm({ user }: { user: User | null }) {
           {user?.id && (
             <AvatarUpload
               uid={user.id}
-              url={avatar_url}
+              url={avatar_url ? getAvatarUrl(avatar_url) : null}
               size={150}
               onUpload={(url) => {
                 setAvatarUrl(url)

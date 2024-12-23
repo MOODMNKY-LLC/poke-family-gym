@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { createClient } from "@/utils/supabase/server";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import AvatarCircles from "./ui/avatar-circles";
+import { getAvatarUrl } from "@/utils/get-avatar-url";
 
 export default async function AuthButton() {
   const supabase = await createClient();
@@ -19,6 +20,15 @@ export default async function AuthButton() {
     .select('avatar_url, family_name')
     .eq('id', user.id)
     .single() : null
+
+  // Get the avatar URL if it exists
+  const avatarUrl = familyProfile?.data?.avatar_url ? getAvatarUrl(familyProfile.data.avatar_url) : null
+
+  // Prepare avatar data for AvatarCircles
+  const avatarData = avatarUrl ? [{
+    imageUrl: avatarUrl,
+    profileUrl: '/account'
+  }] : []
 
   if (!hasEnvVars) {
     return (
@@ -63,17 +73,10 @@ export default async function AuthButton() {
       </span>
       
       <div className="flex items-center gap-2">
-        <Link href="/account" className="block">
-          <Avatar className="h-8 w-8 cursor-pointer hover:opacity-80 transition">
-            <AvatarImage 
-              src={familyProfile?.data?.avatar_url || undefined} 
-              alt="Profile" 
-            />
-            <AvatarFallback>
-              {user.email?.[0].toUpperCase() || '?'}
-            </AvatarFallback>
-          </Avatar>
-        </Link>
+        <AvatarCircles 
+          avatarUrls={avatarData}
+          className="hover:opacity-80 transition cursor-pointer"
+        />
 
         <form action={signOutAction}>
           <Button type="submit" variant="outline" size="sm">

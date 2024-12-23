@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -14,10 +21,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { StarterSelection } from "@/components/pokemon/starter-selection"
 import { toast } from "sonner"
 import { AvatarUpload } from "@/app/account/avatar"
 import { getAvatarUrl } from "@/utils/get-avatar-url"
-import { Role } from '@/types/types' // Update the path to the correct file
+import { Role } from '@/types/types'
 
 interface AddFamilyMemberDialogProps {
   familyId: string
@@ -29,35 +37,107 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<{
+    display_name?: string
+    full_name?: string
+    pin?: string
+    confirmPin?: string
+  }>({})
   const [formData, setFormData] = useState({
     display_name: '',
     full_name: '',
     avatar_url: null as string | null,
     pin: '',
-    confirmPin: ''
+    confirmPin: '',
+    role_id: '2', // Default to child role
+    starter_pokemon_form_id: null as number | null,
+    starter_pokemon_nickname: ''
   })
+
+  // Validate form fields and update error state
+  const validateField = (name: string, value: string) => {
+    const newErrors = { ...errors }
+
+    switch (name) {
+      case 'display_name':
+        if (!value || value.length < 2) {
+          newErrors.display_name = 'Display name must be at least 2 characters long'
+        } else {
+          delete newErrors.display_name
+        }
+        break
+      case 'full_name':
+        if (!value || value.length < 2) {
+          newErrors.full_name = 'Full name must be at least 2 characters long'
+        } else {
+          delete newErrors.full_name
+        }
+        break
+      case 'pin':
+        if (formData.role_id !== '1') {
+          if (!value || value.length !== 6) {
+            newErrors.pin = 'PIN must be 6 digits'
+          } else {
+            delete newErrors.pin
+          }
+          // Also validate confirmPin when pin changes
+          if (value !== formData.confirmPin) {
+            newErrors.confirmPin = 'PINs do not match'
+          } else {
+            delete newErrors.confirmPin
+          }
+        }
+        break
+      case 'confirmPin':
+        if (formData.role_id !== '1') {
+          if (value !== formData.pin) {
+            newErrors.confirmPin = 'PINs do not match'
+          } else {
+            delete newErrors.confirmPin
+          }
+        }
+        break
+    }
+
+    setErrors(newErrors)
+  }
+
+  // Handle input changes with validation
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    let processedValue = value
+
+    // Special handling for PIN fields
+    if (name === 'pin' || name === 'confirmPin') {
+      processedValue = value.replace(/\D/g, '')
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: processedValue
+    }))
+
+    validateField(name, processedValue)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     try {
+      // Validate all fields before submission
+      validateField('display_name', formData.display_name)
+      validateField('full_name', formData.full_name)
+      if (formData.role_id !== '1') {
+        validateField('pin', formData.pin)
+        validateField('confirmPin', formData.confirmPin)
+      }
+
+      // Check if there are any errors
+      if (Object.keys(errors).length > 0) {
+        return // Don't proceed if there are validation errors
+      }
+
       setLoading(true)
-
-      if (!formData.display_name || formData.display_name.length < 2) {
-        throw new Error('Display name must be at least 2 characters long')
-      }
-
-      if (!formData.full_name || formData.full_name.length < 2) {
-        throw new Error('Full name must be at least 2 characters long')
-      }
-
-      if (formData.pin && formData.pin.length !== 6) {
-        throw new Error('PIN must be 6 digits')
-      }
-
-      if (formData.pin !== formData.confirmPin) {
-        throw new Error('PINs do not match')
-      }
 
       // Generate a unique ID for the new member
       const memberId = crypto.randomUUID()
@@ -70,12 +150,31 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
           display_name: formData.display_name,
           full_name: formData.full_name,
           avatar_url: formData.avatar_url,
-          pin: formData.pin || null,
-          role_id: 2, // Default to child role
-          current_status: 'active'
+          pin: formData.role_id !== '1' ? formData.pin : null,
+          role_id: parseInt(formData.role_id),
+          current_status: 'active',
+          starter_pokemon_form_id: formData.starter_pokemon_form_id,
+          starter_pokemon_nickname: formData.starter_pokemon_nickname
         })
 
       if (error) throw error
+
+      // If a starter was selected, add it to the family Pokédex
+      if (formData.starter_pokemon_form_id) {
+        const { error: pokedexError } = await supabase
+          .from('family_pokedex')
+          .insert({
+            family_id: familyId,
+            pokemon_form_id: formData.starter_pokemon_form_id,
+            first_caught_at: new Date().toISOString(),
+            caught_count: 1,
+            is_favorite: true,
+            nickname: formData.starter_pokemon_nickname,
+            notes: `${formData.display_name}'s partner Pokémon`
+          })
+
+        if (pokedexError) throw pokedexError
+      }
 
       toast.success('Family member added successfully!')
       setOpen(false)
@@ -87,8 +186,12 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
         full_name: '',
         avatar_url: null,
         pin: '',
-        confirmPin: ''
+        confirmPin: '',
+        role_id: '2',
+        starter_pokemon_form_id: null,
+        starter_pokemon_nickname: ''
       })
+      setErrors({})
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error adding family member')
       console.error('Error details:', error)
@@ -111,9 +214,10 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* Avatar Upload */}
             <div className="flex flex-col items-center gap-4">
               <AvatarUpload
-                uid={crypto.randomUUID()} // Generate a temporary ID for the avatar
+                uid={crypto.randomUUID()}
                 url={formData.avatar_url ? getAvatarUrl(formData.avatar_url) : null}
                 size={100}
                 onUpload={(url) => {
@@ -125,19 +229,25 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
               />
             </div>
 
+            {/* Basic Information */}
             <div className="grid gap-2">
               <Label htmlFor="display_name">
                 Display Name <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="display_name"
+                name="display_name"
                 value={formData.display_name}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  display_name: e.target.value
-                }))}
+                onChange={handleInputChange}
                 placeholder="Ash"
+                aria-describedby="display_name_error"
+                className={errors.display_name ? "border-red-500" : ""}
               />
+              {errors.display_name && (
+                <p id="display_name_error" className="text-sm text-red-500">
+                  {errors.display_name}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -146,67 +256,132 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
               </Label>
               <Input
                 id="full_name"
+                name="full_name"
                 value={formData.full_name}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  full_name: e.target.value
-                }))}
+                onChange={handleInputChange}
                 placeholder="Ash Ketchum"
+                aria-describedby="full_name_error"
+                className={errors.full_name ? "border-red-500" : ""}
               />
+              {errors.full_name && (
+                <p id="full_name_error" className="text-sm text-red-500">
+                  {errors.full_name}
+                </p>
+              )}
             </div>
 
+            {/* Role Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="pin">
-                PIN
-                <span className="ml-1 text-xs text-muted-foreground">
-                  (6 digits)
-                </span>
-              </Label>
-              <Input
-                id="pin"
-                type="password"
-                inputMode="numeric"
-                pattern="\d{6}"
-                maxLength={6}
-                value={formData.pin}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '')
+              <Label htmlFor="role">Role</Label>
+              <Select
+                value={formData.role_id}
+                onValueChange={(value) => {
                   setFormData(prev => ({
                     ...prev,
-                    pin: value
+                    role_id: value,
+                    // Reset PIN fields when switching to admin role
+                    ...(value === '1' && { pin: '', confirmPin: '' })
                   }))
+                  // Clear PIN-related errors when switching roles
+                  if (value === '1') {
+                    setErrors(prev => {
+                      const { pin, confirmPin, ...rest } = prev
+                      return rest
+                    })
+                  }
                 }}
-                className="font-mono"
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id.toString()}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
+            {/* PIN Fields (only for non-admin roles) */}
+            {formData.role_id !== '1' && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="pin">
+                    PIN
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      (6 digits)
+                    </span>
+                  </Label>
+                  <Input
+                    id="pin"
+                    name="pin"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    value={formData.pin}
+                    onChange={handleInputChange}
+                    className={`font-mono ${errors.pin ? "border-red-500" : ""}`}
+                    aria-describedby="pin_error"
+                  />
+                  {errors.pin && (
+                    <p id="pin_error" className="text-sm text-red-500">
+                      {errors.pin}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="confirmPin">
+                    Confirm PIN
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      (6 digits)
+                    </span>
+                  </Label>
+                  <Input
+                    id="confirmPin"
+                    name="confirmPin"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    value={formData.confirmPin}
+                    onChange={handleInputChange}
+                    className={`font-mono ${errors.confirmPin ? "border-red-500" : ""}`}
+                    aria-describedby="confirm_pin_error"
+                  />
+                  {errors.confirmPin && (
+                    <p id="confirm_pin_error" className="text-sm text-red-500">
+                      {errors.confirmPin}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Starter Pokemon Selection */}
             <div className="grid gap-2">
-              <Label htmlFor="confirmPin">
-                Confirm PIN
-                <span className="ml-1 text-xs text-muted-foreground">
-                  (6 digits)
-                </span>
-              </Label>
-              <Input
-                id="confirmPin"
-                type="password"
-                inputMode="numeric"
-                pattern="\d{6}"
-                maxLength={6}
-                value={formData.confirmPin}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '')
+              <Label>Choose Their Partner Pokémon</Label>
+              <StarterSelection 
+                onSelect={(formId, nickname) => {
                   setFormData(prev => ({
                     ...prev,
-                    confirmPin: value
+                    starter_pokemon_form_id: formId,
+                    starter_pokemon_nickname: nickname
                   }))
                 }}
-                className="font-mono"
+                selectedGeneration={1}
               />
             </div>
           </div>
+
           <DialogFooter>
-            <Button type="submit" disabled={loading}>
+            <Button 
+              type="submit" 
+              disabled={loading || Object.keys(errors).length > 0 || !formData.display_name || !formData.full_name}
+            >
               {loading ? 'Adding...' : 'Add Member'}
             </Button>
           </DialogFooter>

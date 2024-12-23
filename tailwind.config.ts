@@ -52,7 +52,6 @@ const config = {
   				DEFAULT: 'hsl(var(--card))',
   				foreground: 'hsl(var(--card-foreground))'
   			},
-  			'pokemon-gradient': 'hsl(var(--pokemon-card-gradient))',
   			'pokemon-normal': '#A8A878',
   			'pokemon-fire': '#F08030',
   			'pokemon-water': '#6890F0',
@@ -80,6 +79,11 @@ const config = {
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
+  			},
+  			'pokemon-gradient': {
+  				from: 'hsl(var(--pokemon-gradient-from))',
+  				to: 'hsl(var(--pokemon-gradient-to))',
+  				DEFAULT: 'hsl(var(--pokemon-gradient))'
   			}
   		},
   		borderRadius: {
