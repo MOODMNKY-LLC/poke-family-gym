@@ -56,84 +56,75 @@ export const signUpAction = async (formData: FormData): Promise<SignUpResponse> 
 
   // Create initial family profile if user was created
   if (data?.user) {
-    try {
-      // First check if a profile already exists for this user
-      const { data: existingUserProfile } = await supabase
-        .from('family_profiles')
-        .select('id')
-        .eq('id', data.user.id)
-        .single()
+    // First check if a profile already exists for this user
+    const { data: existingUserProfile } = await supabase
+      .from('family_profiles')
+      .select('id')
+      .eq('id', data.user.id)
+      .single()
 
-      if (existingUserProfile) {
-        console.log('Profile already exists for user')
-        return { success: true }
-      }
-
-      // Create new profile if one doesn't exist
-      const { error: profileError } = await supabase
-        .from('family_profiles')
-        .insert({
-          id: data.user.id,
-          family_name: familyName,
-          timezone: 'UTC',
-          locale: 'en',
-          settings: {},
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-
-      if (profileError) {
-        throw new Error('Failed to create family profile: ' + profileError.message)
-      }
-
-      // Create initial admin family member with starter pokemon and PIN
-      const { error: memberError } = await supabase
-        .from('family_members')
-        .insert({
-          family_id: data.user.id,
-          display_name: familyName,
-          full_name: familyName,
-          role_id: 1, // Admin role
-          current_status: 'online',
-          starter_pokemon_form_id: parseInt(starterPokemonFormId),
-          starter_pokemon_nickname: starterPokemonNickname,
-          starter_pokemon_obtained_at: new Date().toISOString(),
-          pin: formData.get('pin')
-        })
-
-      if (memberError) {
-        throw new Error('Failed to create family member: ' + memberError.message)
-      }
-
-      // Add starter to family pokedex
-      const { error: pokedexError } = await supabase
-        .from('family_pokedex')
-        .insert({
-          family_id: data.user.id,
-          pokemon_form_id: parseInt(starterPokemonFormId),
-          first_caught_at: new Date().toISOString(),
-          caught_count: 1,
-          is_favorite: true,
-          nickname: starterPokemonNickname,
-          notes: 'My first partner Pokémon!'
-        })
-
-      if (pokedexError) {
-        throw new Error('Failed to add to pokedex: ' + pokedexError.message)
-      }
-
+    if (existingUserProfile) {
+      console.log('Profile already exists for user')
       return { success: true }
-    } catch (error) {
-      console.error('Error during profile setup:', error)
-      // If any step fails, clean up the auth user
+    }
+
+    // Create new profile if one doesn't exist
+    const { error: profileError } = await supabase
+      .from('family_profiles')
+      .insert({
+        id: data.user.id,
+        family_name: familyName,
+        timezone: 'UTC',
+        locale: 'en',
+        settings: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    if (profileError) {
+      console.error('Failed to create family profile:', profileError)
+      // If profile creation fails, we should clean up the auth user
       const { error: deleteError } = await supabase.auth.admin.deleteUser(data.user.id)
       if (deleteError) console.error('Failed to clean up auth user:', deleteError)
       
-      return { 
-        error: { 
-          message: error instanceof Error ? error.message : "Failed to complete profile setup. Please try again." 
-        } 
-      }
+      return { error: { message: "Failed to create family profile. Please try again." } }
+    }
+
+    // Create initial admin family member with starter pokemon and PIN
+    const { error: memberError } = await supabase
+      .from('family_members')
+      .insert({
+        family_id: data.user.id,
+        display_name: familyName,
+        full_name: familyName,
+        role_id: 1, // Admin role
+        current_status: 'online',
+        starter_pokemon_form_id: parseInt(starterPokemonFormId),
+        starter_pokemon_nickname: starterPokemonNickname,
+        starter_pokemon_obtained_at: new Date().toISOString(),
+        pin: formData.get('pin')
+      })
+
+    if (memberError) {
+      console.error('Error creating family member:', memberError)
+      // Consider cleanup if member creation fails
+    }
+
+    // Add starter to family pokedex
+    const { error: pokedexError } = await supabase
+      .from('family_pokedex')
+      .insert({
+        family_id: data.user.id,
+        pokemon_form_id: parseInt(starterPokemonFormId),
+        first_caught_at: new Date().toISOString(),
+        caught_count: 1,
+        is_favorite: true,
+        nickname: starterPokemonNickname,
+        notes: 'My first partner Pokémon!'
+      })
+
+    if (pokedexError) {
+      console.error('Error adding to pokedex:', pokedexError)
     }
   }
 
