@@ -36,6 +36,9 @@ import { PokemonClient } from 'pokenode-ts'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
+import { DeleteMemberDialog } from "./delete-member-dialog"
+import { DeleteFamilyDialog } from "./delete-family-dialog"
+import { Role } from '@/types/types'
 
 interface MemberProfileFormProps {
   member: {
@@ -47,8 +50,11 @@ interface MemberProfileFormProps {
     pin: string
     family_id: string
   avatar_url: string | null
+  role_id: number
     starter_pokemon_form_id?: number
     starter_pokemon_nickname?: string
+    starter_pokemon_obtained_at?: string
+    starter_pokemon_ribbons?: string[]
     experience_points?: number
     trainer_class?: string
     badges_earned?: number
@@ -58,11 +64,12 @@ interface MemberProfileFormProps {
     starter_pokemon_move_2?: string
     starter_pokemon_move_3?: string
     starter_pokemon_move_4?: string
-    starter_pokemon_ribbons?: string[]
   }
+  roles?: Role[]
+  onSuccess?: () => void
 }
 
-export function MemberProfileForm({ member }: MemberProfileFormProps) {
+export function MemberProfileForm({ member, roles, onSuccess }: MemberProfileFormProps) {
   const router = useRouter()
   const supabase = createClient()
   const [isLoading, setIsLoading] = useState(false)
@@ -421,7 +428,7 @@ export function MemberProfileForm({ member }: MemberProfileFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8">
       <Card className="glass-effect glass-border p-6">
         <Tabs defaultValue="trainer" className="w-full">
           <TabsList className="w-full flex justify-center mb-6 bg-muted/50 rounded-lg p-1">
@@ -912,9 +919,9 @@ export function MemberProfileForm({ member }: MemberProfileFormProps) {
                             size="sm"
                             className="glass-effect"
                             onClick={handleAddRibbon}
-                          >
+        >
                             Add Ribbon
-                          </Button>
+        </Button>
                         </div>
                       </div>
                     </CardContent>
@@ -930,18 +937,26 @@ export function MemberProfileForm({ member }: MemberProfileFormProps) {
         </Tabs>
       </Card>
 
-      <div className="flex justify-end">
-        <Button 
-          type="submit" 
-          disabled={
-            isLoading || 
-            Object.keys(errors).length > 0 || 
-            !displayName || 
-            !fullName || 
-            (isChangingPin && (!pin || !confirmPin || pin.length !== 6))
-          }
-        >
-          {isLoading ? 'Updating...' : 'Update Profile'}
+      <div className="flex justify-between items-center">
+        <div className="flex gap-2">
+          {/* Show delete family dialog for admin */}
+          {member.role_id === 1 && (
+            <DeleteFamilyDialog 
+              familyId={member.family_id} 
+              familyName={member.display_name} 
+            />
+          )}
+          {/* Show delete member dialog for non-admin members */}
+          {member.role_id !== 1 && (
+            <DeleteMemberDialog
+              memberId={member.id}
+              memberName={member.display_name}
+              onSuccess={onSuccess}
+            />
+          )}
+        </div>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? "Saving..." : "Save Changes"}
         </Button>
       </div>
     </form>

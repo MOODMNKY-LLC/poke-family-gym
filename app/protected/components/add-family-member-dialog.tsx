@@ -16,16 +16,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StarterSelection } from "@/components/pokemon/starter-selection"
 import { toast } from "sonner"
 import { AvatarUpload } from "@/app/account/avatar"
 import { getAvatarUrl } from "@/utils/get-avatar-url"
 import { Role } from '@/types/types'
+import { UserCircle, CircleDot } from "lucide-react"
 
 interface AddFamilyMemberDialogProps {
   familyId: string
@@ -37,6 +38,7 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [currentTab, setCurrentTab] = useState("info")
   const [errors, setErrors] = useState<{
     display_name?: string
     full_name?: string
@@ -180,7 +182,7 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
       setOpen(false)
       onSuccess?.()
       
-      // Reset form
+      // Reset form and tab
       setFormData({
         display_name: '',
         full_name: '',
@@ -192,6 +194,7 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
         starter_pokemon_nickname: ''
       })
       setErrors({})
+      setCurrentTab("info")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error adding family member')
       console.error('Error details:', error)
@@ -205,187 +208,218 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
       <DialogTrigger asChild>
         <Button>Add Family Member</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Add Family Member</DialogTitle>
-            <DialogDescription>
-              Add a new member to your family. They will be added as a child by default.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {/* Avatar Upload */}
-            <div className="flex flex-col items-center gap-4">
-              <AvatarUpload
-                uid={crypto.randomUUID()}
-                url={formData.avatar_url ? getAvatarUrl(formData.avatar_url) : null}
-                size={100}
-                onUpload={(url) => {
-                  setFormData(prev => ({
-                    ...prev,
-                    avatar_url: url
-                  }))
-                }}
-              />
-            </div>
+      <DialogContent className="sm:max-w-[600px] p-0">
+        <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
+          <div className="p-6 pb-2">
+            <DialogHeader className="pb-4">
+              <DialogTitle>Add Family Member</DialogTitle>
+              <DialogDescription>
+                Add a new member to your family. They will be added as a child by default.
+              </DialogDescription>
+            </DialogHeader>
 
-            {/* Basic Information */}
-            <div className="grid gap-2">
-              <Label htmlFor="display_name">
-                Display Name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="display_name"
-                name="display_name"
-                value={formData.display_name}
-                onChange={handleInputChange}
-                placeholder="Ash"
-                aria-describedby="display_name_error"
-                className={errors.display_name ? "border-red-500" : ""}
-              />
-              {errors.display_name && (
-                <p id="display_name_error" className="text-sm text-red-500">
-                  {errors.display_name}
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="full_name">
-                Full Name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="full_name"
-                name="full_name"
-                value={formData.full_name}
-                onChange={handleInputChange}
-                placeholder="Ash Ketchum"
-                aria-describedby="full_name_error"
-                className={errors.full_name ? "border-red-500" : ""}
-              />
-              {errors.full_name && (
-                <p id="full_name_error" className="text-sm text-red-500">
-                  {errors.full_name}
-                </p>
-              )}
-            </div>
-
-            {/* Role Selection */}
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Select
-                value={formData.role_id}
-                onValueChange={(value) => {
-                  setFormData(prev => ({
-                    ...prev,
-                    role_id: value,
-                    // Reset PIN fields when switching to admin role
-                    ...(value === '1' && { pin: '', confirmPin: '' })
-                  }))
-                  // Clear PIN-related errors when switching roles
-                  if (value === '1') {
-                    setErrors(prev => {
-                      const { pin, confirmPin, ...rest } = prev
-                      return rest
-                    })
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id.toString()}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* PIN Fields (only for non-admin roles) */}
-            {formData.role_id !== '1' && (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="pin">
-                    PIN
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      (6 digits)
-                    </span>
-                  </Label>
-                  <Input
-                    id="pin"
-                    name="pin"
-                    type="password"
-                    inputMode="numeric"
-                    pattern="\d{6}"
-                    maxLength={6}
-                    value={formData.pin}
-                    onChange={handleInputChange}
-                    className={`font-mono ${errors.pin ? "border-red-500" : ""}`}
-                    aria-describedby="pin_error"
-                  />
-                  {errors.pin && (
-                    <p id="pin_error" className="text-sm text-red-500">
-                      {errors.pin}
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="confirmPin">
-                    Confirm PIN
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      (6 digits)
-                    </span>
-                  </Label>
-                  <Input
-                    id="confirmPin"
-                    name="confirmPin"
-                    type="password"
-                    inputMode="numeric"
-                    pattern="\d{6}"
-                    maxLength={6}
-                    value={formData.confirmPin}
-                    onChange={handleInputChange}
-                    className={`font-mono ${errors.confirmPin ? "border-red-500" : ""}`}
-                    aria-describedby="confirm_pin_error"
-                  />
-                  {errors.confirmPin && (
-                    <p id="confirm_pin_error" className="text-sm text-red-500">
-                      {errors.confirmPin}
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Starter Pokemon Selection */}
-            <div className="grid gap-2">
-              <Label>Choose Their Partner Pokémon</Label>
-              <StarterSelection 
-                onSelect={(formId, nickname) => {
-                  setFormData(prev => ({
-                    ...prev,
-                    starter_pokemon_form_id: formId,
-                    starter_pokemon_nickname: nickname
-                  }))
-                }}
-                selectedGeneration={1}
-              />
-            </div>
+            <TabsList className="w-full grid grid-cols-2">
+              <TabsTrigger value="info" className="flex items-center gap-2">
+                <UserCircle className="w-4 h-4" />
+                Basic Info
+              </TabsTrigger>
+              <TabsTrigger value="pokemon" className="flex items-center gap-2">
+                <CircleDot className="w-4 h-4" />
+                Partner Pokémon
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          <DialogFooter>
-            <Button 
-              type="submit" 
-              disabled={loading || Object.keys(errors).length > 0 || !formData.display_name || !formData.full_name}
-            >
-              {loading ? 'Adding...' : 'Add Member'}
-            </Button>
-          </DialogFooter>
-        </form>
+          <form onSubmit={handleSubmit}>
+            <TabsContent value="info" className="p-6 pt-2">
+              <div className="space-y-4">
+                {/* Avatar Upload */}
+                <div className="flex flex-col items-center gap-4">
+                  <AvatarUpload
+                    uid={crypto.randomUUID()}
+                    url={formData.avatar_url ? getAvatarUrl(formData.avatar_url) : null}
+                    size={100}
+                    onUpload={(url) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        avatar_url: url
+                      }))
+                    }}
+                  />
+                </div>
+
+                {/* Basic Information */}
+                <div className="grid gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="display_name">
+                      Display Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="display_name"
+                      name="display_name"
+                      value={formData.display_name}
+                      onChange={handleInputChange}
+                      placeholder="Ash"
+                      aria-describedby="display_name_error"
+                      className={errors.display_name ? "border-red-500" : ""}
+                    />
+                    {errors.display_name && (
+                      <p id="display_name_error" className="text-sm text-red-500">
+                        {errors.display_name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name">
+                      Full Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="full_name"
+                      name="full_name"
+                      value={formData.full_name}
+                      onChange={handleInputChange}
+                      placeholder="Ash Ketchum"
+                      aria-describedby="full_name_error"
+                      className={errors.full_name ? "border-red-500" : ""}
+                    />
+                    {errors.full_name && (
+                      <p id="full_name_error" className="text-sm text-red-500">
+                        {errors.full_name}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Role Selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="role">Role</Label>
+                    <Select
+                      value={formData.role_id}
+                      onValueChange={(value) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          role_id: value,
+                          ...(value === '1' && { pin: '', confirmPin: '' })
+                        }))
+                        if (value === '1') {
+                          setErrors(prev => {
+                            const { pin, confirmPin, ...rest } = prev
+                            return rest
+                          })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id.toString()}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* PIN Fields (only for non-admin roles) */}
+                  {formData.role_id !== '1' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="pin">
+                          PIN <span className="ml-1 text-xs text-muted-foreground">(6 digits)</span>
+                        </Label>
+                        <Input
+                          id="pin"
+                          name="pin"
+                          type="password"
+                          inputMode="numeric"
+                          pattern="\d{6}"
+                          maxLength={6}
+                          value={formData.pin}
+                          onChange={handleInputChange}
+                          className={`font-mono ${errors.pin ? "border-red-500" : ""}`}
+                          aria-describedby="pin_error"
+                        />
+                        {errors.pin && (
+                          <p id="pin_error" className="text-sm text-red-500">
+                            {errors.pin}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="confirmPin">
+                          Confirm PIN <span className="ml-1 text-xs text-muted-foreground">(6 digits)</span>
+                        </Label>
+                        <Input
+                          id="confirmPin"
+                          name="confirmPin"
+                          type="password"
+                          inputMode="numeric"
+                          pattern="\d{6}"
+                          maxLength={6}
+                          value={formData.confirmPin}
+                          onChange={handleInputChange}
+                          className={`font-mono ${errors.confirmPin ? "border-red-500" : ""}`}
+                          aria-describedby="confirm_pin_error"
+                        />
+                        {errors.confirmPin && (
+                          <p id="confirm_pin_error" className="text-sm text-red-500">
+                            {errors.confirmPin}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button 
+                    type="button" 
+                    onClick={() => setCurrentTab("pokemon")}
+                  >
+                    Next: Choose Partner
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="pokemon" className="p-6 pt-2">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Choose Their Partner Pokémon</Label>
+                  <StarterSelection 
+                    onSelect={(formId, nickname) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        starter_pokemon_form_id: formId,
+                        starter_pokemon_nickname: nickname
+                      }))
+                    }}
+                    selectedGeneration={1}
+                  />
+                </div>
+
+                <div className="flex justify-between">
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={() => setCurrentTab("info")}
+                  >
+                    Back to Info
+                  </Button>
+                  <Button 
+                    type="submit"
+                    disabled={loading || Object.keys(errors).length > 0 || !formData.display_name || !formData.full_name}
+                  >
+                    {loading ? 'Adding...' : 'Add Member'}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+          </form>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )
