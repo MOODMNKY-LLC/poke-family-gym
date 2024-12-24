@@ -11,7 +11,8 @@ import {
   Medal,
   Search,
   SortAsc,
-  Filter
+  Filter,
+  Bot
 } from "lucide-react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -40,6 +41,7 @@ import { RankingsBoard } from './components/rankings-board'
 import { FamilyMembersGrid } from './components/family-members-grid'
 import { PokemonGrid } from "@/app/pokedex/components/pokemon-grid"
 import { FamilyPokedexGrid } from './components/family-pokedex-grid'
+import { PokeDexter } from './components/poke-dexter'
 
 // Define PokemonWithEntry type locally since it's only used here
 interface PokemonWithEntry extends Pokemon {
@@ -120,7 +122,7 @@ export default async function ProtectedPage() {
 
           <Tabs defaultValue="overview" className="space-y-8">
             <TabsList className={cn(
-              "grid w-full grid-cols-5 lg:w-[600px] mx-auto",
+              "grid w-full grid-cols-6 lg:w-[720px] mx-auto",
               "glass-effect glass-border"
             )}>
               <TabsTrigger 
@@ -177,6 +179,17 @@ export default async function ProtectedPage() {
               >
                 <Medal className="w-4 h-4" />
                 Ranks
+              </TabsTrigger>
+              <TabsTrigger 
+                value="pokedexter" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Bot className="w-4 h-4" />
+                PokéDexter
               </TabsTrigger>
             </TabsList>
 
@@ -259,6 +272,20 @@ export default async function ProtectedPage() {
                     members={dashboardData.members}
                     gymRank={dashboardData.gymStats.gymRank}
                   />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="pokedexter">
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-primary">
+                      PokéDexter AI Assistant
+                    </h2>
+                    <p className="text-muted-foreground">
+                      Your personal Pokémon expert and family gym advisor
+                    </p>
+                  </div>
+                  <PokeDexter />
                 </div>
               </TabsContent>
             </AnimatedTabContent>
