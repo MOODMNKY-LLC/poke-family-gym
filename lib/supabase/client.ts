@@ -1,9 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 // Types based on our schema
 export interface ChatMessage {
@@ -29,4 +31,22 @@ export interface ChatMessageFeedback {
   messageId: string
   rating: string
   createdDate: string
+}
+
+export interface FamilyMember {
+  id: string
+  family_id: string
+  display_name: string
+  full_name: string
+  role_id: number
+  birth_date?: string | null
+  favorite_color?: string | null
+  current_status: string
+  avatar_url?: string | null
+  pin?: string | null
+  created_at: string
+  updated_at: string
+  starter_pokemon_form_id?: number | null
+  starter_pokemon_nickname?: string | null
+  starter_pokemon_obtained_at?: string | null
 } 
