@@ -199,10 +199,64 @@ export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyM
           role_id: parseInt(formData.role_id),
           personal_motto: formData.personal_motto || null,
           starter_pokemon_form_id: formData.starter_pokemon_form_id,
-          starter_pokemon_nickname: formData.starter_pokemon_nickname || null
+          starter_pokemon_nickname: formData.starter_pokemon_nickname || null,
+          starter_pokemon_obtained_at: formData.starter_pokemon_form_id ? new Date().toISOString() : null
         })
 
       if (error) throw error
+
+      // Add starter to family pokedex if a starter was selected
+      if (formData.starter_pokemon_form_id) {
+        // First try to update existing entry
+        const { data: existingEntry, error: checkError } = await supabase
+          .from('family_pokedex')
+          .select('id, caught_count')
+          .eq('family_id', familyId)
+          .eq('pokemon_form_id', formData.starter_pokemon_form_id)
+          .single()
+
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
+          console.error('Error checking pokedex:', checkError)
+          toast.error('Failed to check Pokédex entry')
+          return
+        }
+
+        if (existingEntry) {
+          // Update existing entry by incrementing caught_count
+          const { error: updateError } = await supabase
+            .from('family_pokedex')
+            .update({
+              caught_count: (existingEntry.caught_count || 0) + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingEntry.id)
+
+          if (updateError) {
+            console.error('Error updating pokedex:', updateError)
+            toast.error('Failed to update Pokédex entry')
+            return
+          }
+        } else {
+          // Insert new entry if it doesn't exist
+          const { error: insertError } = await supabase
+            .from('family_pokedex')
+            .insert({
+              family_id: familyId,
+              pokemon_form_id: formData.starter_pokemon_form_id,
+              first_caught_at: new Date().toISOString(),
+              caught_count: 1,
+              is_favorite: true,
+              nickname: formData.starter_pokemon_nickname || null,
+              notes: 'A new partner Pokémon!'
+            })
+
+          if (insertError) {
+            console.error('Error adding to pokedex:', insertError)
+            toast.error('Failed to add Pokémon to family Pokédex')
+            return
+          }
+        }
+      }
 
       toast.success('Family member added successfully!')
       setOpen(false)

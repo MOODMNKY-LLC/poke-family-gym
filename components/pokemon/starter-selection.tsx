@@ -104,7 +104,7 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
             } satisfies StarterPokemon
           })
         )
-        
+
         setStarters(pokemonData)
       } catch (error) {
         toast.error("Failed to load starter Pokémon")
@@ -115,47 +115,43 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
     }
 
     fetchStarters()
-  }, [generation])
-
-  const handleGenerationChange = (value: string) => {
-    setGeneration(parseInt(value))
-    setSelectedStarter(null)
-    setNickname("")
-  }
+  }, [generation]) // Re-fetch when generation changes
 
   const handleStarterSelect = (starter: StarterPokemon) => {
     setSelectedStarter(starter)
+    setNickname("")
   }
 
-  const handleConfirmSelection = async (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    if (selectedStarter && nickname) {
-      setIsSelecting(true)
-      // Add a small delay for the animation effect
-      await new Promise(resolve => setTimeout(resolve, 1000))
+  const handleConfirmSelection = () => {
+    if (!selectedStarter || !nickname.trim()) return
+    setIsSelecting(true)
+    setTimeout(() => {
       onSelect(selectedStarter.id, nickname)
-    } else {
-      toast.error("Please select a starter Pokémon and provide a nickname.")
-    }
+      setIsSelecting(false)
+    }, 500)
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Label htmlFor="generation" className="min-w-24">Generation</Label>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <Label>Generation</Label>
         <Select
           value={generation.toString()}
-          onValueChange={handleGenerationChange}
+          onValueChange={(value) => setGeneration(parseInt(value))}
         >
-          <SelectTrigger id="generation">
+          <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Select generation" />
           </SelectTrigger>
           <SelectContent>
-            {Object.keys(STARTER_POKEMON).map((gen) => (
-              <SelectItem key={gen} value={gen}>
-                Generation {gen}
-              </SelectItem>
-            ))}
+            <SelectItem value="1">Generation I (Kanto)</SelectItem>
+            <SelectItem value="2">Generation II (Johto)</SelectItem>
+            <SelectItem value="3">Generation III (Hoenn)</SelectItem>
+            <SelectItem value="4">Generation IV (Sinnoh)</SelectItem>
+            <SelectItem value="5">Generation V (Unova)</SelectItem>
+            <SelectItem value="6">Generation VI (Kalos)</SelectItem>
+            <SelectItem value="7">Generation VII (Alola)</SelectItem>
+            <SelectItem value="8">Generation VIII (Galar)</SelectItem>
+            <SelectItem value="9">Generation IX (Paldea)</SelectItem>
           </SelectContent>
         </Select>
       </div>
