@@ -31,10 +31,9 @@ import { UserCircle, CircleDot } from "lucide-react"
 interface AddFamilyMemberDialogProps {
   familyId: string
   roles: Role[]
-  onSuccess?: () => void
 }
 
-export function AddFamilyMemberDialog({ familyId, roles, onSuccess }: AddFamilyMemberDialogProps) {
+export function AddFamilyMemberDialog({ familyId, roles }: AddFamilyMemberDialogProps) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)

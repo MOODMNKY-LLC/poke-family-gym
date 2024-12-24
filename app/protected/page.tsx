@@ -1,25 +1,52 @@
 import { createClient } from "@/utils/supabase/server"
 import { Button } from "@/components/ui/button"
-import { Settings } from "lucide-react"
+import { 
+  Settings, 
+  Star, 
+  Trophy, 
+  Users, 
+  Activity, 
+  Sparkles, 
+  ShoppingBag,
+  Medal,
+  Search,
+  SortAsc,
+  Filter
+} from "lucide-react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { AddFamilyMemberDialog } from './components/add-family-member-dialog'
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatDistanceToNow } from 'date-fns'
 import { GymStats } from './components/gym-stats'
 import { PokemonStats } from './components/pokemon-stats'
 import { ActivityFeed } from './components/activity-feed'
 import { getDashboardData } from './lib/get-dashboard-data'
 import { PokemonClient } from 'pokenode-ts'
-import { getAvatarUrl } from '@/utils/get-avatar-url'
-import { cn } from '@/lib/utils'
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
 
-// Create a separate client component for the Pokemon card
-import { PokemonPartnerCard } from '@/components/pokemon/partner-card'
-
-// Create a client component for the member card
+// Import client components
+import { AnimatedHeader } from './components/animated-header'
+import { AnimatedTabContent } from './components/animated-tab-content'
 import { FamilyMemberCard } from '@/components/family/member-card'
+import type { DashboardData } from '@/types/dashboard'
+import type { Pokemon } from 'pokenode-ts'
+import type { Role } from '@/types/types'
+import { PokedexTable } from './components/pokedex-table'
+import { ShopItems } from './components/shop-items'
+import { RankingsBoard } from './components/rankings-board'
+import { FamilyMembersGrid } from './components/family-members-grid'
+
+// Define PokemonWithEntry type locally since it's only used here
+interface PokemonWithEntry extends Pokemon {
+  entry?: {
+    pokemonId: number
+    nickname: string | null
+    obtainedAt: string
+  }
+}
 
 export default async function ProtectedPage() {
   const supabase = await createClient()
@@ -43,91 +70,186 @@ export default async function ProtectedPage() {
     return null
   }
 
-  // Fetch Pokémon data for starter Pokémon
+  // Fetch Pokémon data for all entries
   const api = new PokemonClient()
-  const starterPokemonData = await Promise.all(
-    dashboardData.members
-      .filter(member => member.starterPokemon?.formId)
-      .map(async member => {
-        try {
-          const pokemon = await api.getPokemonById(member.starterPokemon!.formId)
-          return {
-            memberId: member.id,
-            pokemon
-          }
-        } catch (error) {
-          console.error('Error fetching Pokémon data:', error)
-          return null
-        }
-      })
-  )
+  const pokemonDataMap = new Map<number, Pokemon>()
 
-  // Create a map for easy lookup
-  const pokemonDataMap = new Map(
-    starterPokemonData
-      .filter((data): data is { memberId: string; pokemon: any } => data !== null)
-      .map(data => [data.memberId, data.pokemon])
-  )
+  // First, fetch starter Pokémon data
+  if (dashboardData.members?.length > 0) {
+    await Promise.all(
+      dashboardData.members
+        .filter(member => member.starterPokemon?.formId)
+        .map(async member => {
+          const formId = member.starterPokemon!.formId
+          if (pokemonDataMap.has(formId)) return
+
+          try {
+            const pokemon = await api.getPokemonById(formId)
+            pokemonDataMap.set(formId, pokemon)
+          } catch (error) {
+            console.error(`Error fetching Pokémon data for ID ${formId}:`, error)
+          }
+        })
+    )
+  }
+
+  // Calculate gym level based on total points
+  const gymLevel = Math.floor((dashboardData.gymStats?.totalPokeballs || 0) / 100) + 1
+  const pointsToNextLevel = 100 - ((dashboardData.gymStats?.totalPokeballs || 0) % 100)
 
   return (
-    <div className="flex-1 space-y-8 p-8 pt-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">
-            Welcome to {dashboardData.familyProfile.name} Gym
-          </h1>
-          {dashboardData.familyProfile.motto && (
-            <p className="text-muted-foreground">
-              {dashboardData.familyProfile.motto}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/account">
-              <Settings className="h-4 w-4 mr-2" />
-              Family Settings
-            </Link>
-          </Button>
-          <AddFamilyMemberDialog 
-            familyId={user.id} 
-            roles={roles}
-          />
-        </div>
-      </div>
-
-      {/* Gym Stats */}
-      <GymStats stats={dashboardData.gymStats} />
-
-      <div className="grid gap-8 md:grid-cols-2">
-        {/* Pokemon Stats */}
-        <PokemonStats stats={dashboardData.pokemonStats} />
-
-        {/* Activity Feed */}
-        <ActivityFeed 
-          initialEvents={dashboardData.recentActivity}
-          familyId={user.id}
-        />
-      </div>
-
-      {/* Family Members */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold tracking-tight">Family Members</h2>
+    <div className="min-h-screen bg-gradient-to-b from-background via-background/80 to-background">
+      <div className="flex-1 space-y-8 p-8 pt-6 container mx-auto max-w-7xl relative">
+        {/* Subtle radial gradient overlay using pokemon colors */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-pokemon-electric/5 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-pokemon-water/[0.02] to-transparent" />
         </div>
         
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {dashboardData.members.map((member) => {
-            const starterPokemon = pokemonDataMap.get(member.id)
-            
-            return (
-              <FamilyMemberCard
-                key={member.id}
-                member={member}
-                starterPokemon={starterPokemon}
-              />
-            )
-          })}
+        <div className="relative">
+          <AnimatedHeader 
+            familyName={dashboardData.familyProfile.name}
+            motto={dashboardData.familyProfile.motto}
+            gymLevel={gymLevel}
+            pointsToNextLevel={pointsToNextLevel}
+            userId={user.id}
+            roles={roles}
+          />
+
+          <Tabs defaultValue="overview" className="space-y-8">
+            <TabsList className={cn(
+              "grid w-full grid-cols-5 lg:w-[600px] mx-auto",
+              "glass-effect glass-border"
+            )}>
+              <TabsTrigger 
+                value="overview" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Activity className="w-4 h-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger 
+                value="members" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Users className="w-4 h-4" />
+                Members
+              </TabsTrigger>
+              <TabsTrigger 
+                value="pokedex" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Star className="w-4 h-4" />
+                Pokédex
+              </TabsTrigger>
+              <TabsTrigger 
+                value="shop" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <ShoppingBag className="w-4 h-4" />
+                Shop
+              </TabsTrigger>
+              <TabsTrigger 
+                value="leaderboard" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Medal className="w-4 h-4" />
+                Ranks
+              </TabsTrigger>
+            </TabsList>
+
+            <AnimatedTabContent>
+              <TabsContent value="overview" className="space-y-8">
+                <GymStats stats={dashboardData.gymStats} />
+                <div className="grid gap-8 md:grid-cols-2">
+                  <PokemonStats stats={dashboardData.pokemonStats} />
+                  <ActivityFeed 
+                    initialEvents={dashboardData.recentActivity}
+                    familyId={user.id}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="members">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-primary">
+                        Family Members
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Your family's trainers and their partner Pokémon
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <FamilyMembersGrid 
+                    members={dashboardData.members}
+                    pokemonDataMap={pokemonDataMap}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="pokedex">
+                <PokedexTable 
+                  entries={[]}
+                  totalCaught={dashboardData.pokemonStats?.totalCaught || 0}
+                  totalAvailable={151}
+                />
+              </TabsContent>
+
+              <TabsContent value="shop">
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-primary">
+                      Poké Shop
+                    </h2>
+                    <p className="text-muted-foreground">
+                      Spend your hard-earned Pokéballs on rewards and items
+                    </p>
+                  </div>
+                  <ShopItems />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="leaderboard">
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-primary">
+                      Family Rankings
+                    </h2>
+                    <p className="text-muted-foreground">
+                      Track achievements and compete for top positions
+                    </p>
+                  </div>
+                  <RankingsBoard 
+                    members={dashboardData.members}
+                    gymRank={dashboardData.gymStats.gymRank}
+                  />
+                </div>
+              </TabsContent>
+            </AnimatedTabContent>
+          </Tabs>
         </div>
       </div>
     </div>

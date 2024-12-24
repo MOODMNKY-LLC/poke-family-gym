@@ -1,175 +1,160 @@
 'use client'
 
-import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getAvatarUrl } from "@/utils/get-avatar-url"
-import { formatDistanceToNow } from 'date-fns'
+import { Button } from "@/components/ui/button"
+import { Settings, Star } from "lucide-react"
+import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import type { DashboardMember } from "@/types/dashboard"
+import type { Pokemon } from "pokenode-ts"
 
-interface FamilyMemberCardProps {
-  member: {
-    id: string
-    displayName: string
-    fullName: string
-    avatarUrl: string | null
-    roleId: number
-    roleName: string
-    personalMotto?: string | null
-    lastActive: string
-    dateOfBirth?: string | null
-    favoriteColor?: string | null
-    starterPokemon?: {
-      formId: number
-      nickname: string | null
-      friendship: number
-      experience: number
-    } | null
-  }
-  starterPokemon?: any
+interface MemberCardProps {
+  member: DashboardMember
+  starterPokemon: Pokemon | null
 }
 
-export function FamilyMemberCard({ member, starterPokemon }: FamilyMemberCardProps) {
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 15,
+      mass: 1
+    }
+  }
+}
+
+const contentVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      delay: 0.2,
+      staggerChildren: 0.1
+    }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 12
+    }
+  }
+}
+
+export function FamilyMemberCard({ member, starterPokemon }: MemberCardProps) {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-6">
-        <div className="flex items-start gap-4">
-          <Avatar className="h-12 w-12">
-            <AvatarImage
-              src={member.avatarUrl ? getAvatarUrl(member.avatarUrl) || undefined : undefined}
-              alt={member.displayName}
-            />
-            <AvatarFallback>{member.displayName[0].toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">{member.displayName}</h3>
-              <Badge variant="secondary">{member.roleName}</Badge>
-            </div>
-            {member.personalMotto ? (
-              <p className="text-sm text-muted-foreground italic">"{member.personalMotto}"</p>
-            ) : (
-              <p className="text-sm text-muted-foreground italic text-opacity-50">"No motto set..."</p>
-            )}
-          </div>
-        </div>
-
-        {/* Partner Section */}
-        <div className="mt-4">
-          <p className="text-sm font-medium text-muted-foreground mb-2">Partner</p>
-          {starterPokemon ? (
-            <div className="relative p-4 rounded-lg bg-card/50 border">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="font-semibold">{member.starterPokemon?.nickname || starterPokemon.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    #{String(starterPokemon.id).padStart(3, '0')} - Seed Pokémon (Gen I)
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  {starterPokemon.types.map((type: any) => (
-                    <Badge key={type.type.name} variant="outline">
-                      {type.type.name}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <img
-                  src={starterPokemon.sprites.front_default}
+    <motion.div
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover={{ scale: 1.02 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+    >
+      <Card className={cn(
+        "overflow-hidden relative",
+        "glass-card glass-border"
+      )}>
+        <CardHeader className="p-0">
+          <div className="relative h-32 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent">
+            <motion.div 
+              className="absolute inset-0 flex items-center justify-center"
+              variants={contentVariants}
+            >
+              {starterPokemon ? (
+                <motion.img
+                  src={starterPokemon.sprites.front_default || ''}
                   alt={starterPokemon.name}
-                  className="w-16 h-16 object-contain"
+                  className="w-32 h-32 object-contain transform scale-150 opacity-50"
+                  initial={{ scale: 1.2, opacity: 0 }}
+                  animate={{ scale: 1.5, opacity: 0.5 }}
+                  transition={{ duration: 0.3 }}
                 />
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Height</span>
-                    <span>{(starterPokemon.height * 0.1).toFixed(1)}m</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Weight</span>
-                    <span>{(starterPokemon.weight * 0.1).toFixed(1)}kg</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Friendship</span>
-                    <span>{member.starterPokemon?.friendship || 0}/255</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span>Experience</span>
-                    <span>{member.starterPokemon?.experience || 0}/100</span>
-                  </div>
-                </div>
-              </div>
+              ) : (
+                <Star className="w-12 h-12 text-primary/20" />
+              )}
+            </motion.div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 pt-4">
+          <motion.div 
+            className="space-y-4"
+            variants={contentVariants}
+          >
+            <div className="flex items-start justify-between">
+              <motion.div variants={itemVariants} className="space-y-1">
+                <h3 className="font-semibold text-lg">
+                  {member.displayName}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {member.birthDate}
+                </p>
+              </motion.div>
+              <motion.div variants={itemVariants}>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </motion.div>
             </div>
-          ) : (
-            <div className="relative p-4 rounded-lg bg-card/50 border">
-              <div className="flex items-center justify-between mb-2">
+
+            <motion.div variants={itemVariants}>
+              <Badge 
+                variant="secondary" 
+                className={cn(
+                  "bg-primary/10 text-primary",
+                  "border-primary/20"
+                )}
+              >
+                {member.role.name}
+              </Badge>
+            </motion.div>
+
+            {member.personalMotto && (
+              <motion.p 
+                variants={itemVariants}
+                className="text-sm text-muted-foreground italic"
+              >
+                "{member.personalMotto}"
+              </motion.p>
+            )}
+
+            {starterPokemon && (
+              <motion.div 
+                variants={itemVariants}
+                className="flex items-center gap-2"
+              >
+                <div className="w-8 h-8">
+                  <motion.img
+                    src={starterPokemon.sprites.front_default || ''}
+                    alt={starterPokemon.name}
+                    className="w-full h-full object-contain"
+                    whileHover={{ scale: 1.2 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                  />
+                </div>
                 <div>
-                  <p className="font-semibold text-muted-foreground">No Partner Selected</p>
+                  <p className="text-sm font-medium capitalize">
+                    {member.starterPokemon?.nickname || starterPokemon.name}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    #000 - Unknown Pokémon
+                    Partner Pokémon
                   </p>
                 </div>
-                <div className="flex gap-1">
-                  <Badge variant="outline">???</Badge>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-16 h-16 bg-card/50 rounded-lg flex items-center justify-center">
-                  <span className="text-2xl text-muted-foreground">?</span>
-                </div>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Height</span>
-                    <span>0.0m</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Weight</span>
-                    <span>0.0kg</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Friendship</span>
-                    <span>0/255</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Experience</span>
-                    <span>0/100</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Member Details */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center text-sm">
-            <span className="text-muted-foreground">Birthday:</span>
-            {member.dateOfBirth ? (
-              <span className="ml-2">{new Date(member.dateOfBirth).toLocaleDateString()}</span>
-            ) : (
-              <span className="ml-2 text-muted-foreground text-opacity-50">Not set</span>
+              </motion.div>
             )}
-          </div>
-          <div className="flex items-center text-sm">
-            <span className="text-muted-foreground">Favorite Color:</span>
-            {member.favoriteColor ? (
-              <div className="flex items-center ml-2">
-                <div 
-                  className="w-4 h-4 rounded-full border"
-                  style={{ backgroundColor: member.favoriteColor }}
-                />
-                <span className="ml-2">{member.favoriteColor}</span>
-              </div>
-            ) : (
-              <span className="ml-2 text-muted-foreground text-opacity-50">Not set</span>
-            )}
-          </div>
-          <div className="flex items-center text-sm">
-            <span className="text-muted-foreground">Last Active:</span>
-            <span className="ml-2">{formatDistanceToNow(new Date(member.lastActive))} ago</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </motion.div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 } 
