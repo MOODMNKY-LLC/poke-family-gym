@@ -38,6 +38,8 @@ import { PokedexTable } from './components/pokedex-table'
 import { ShopItems } from './components/shop-items'
 import { RankingsBoard } from './components/rankings-board'
 import { FamilyMembersGrid } from './components/family-members-grid'
+import { PokemonGrid } from "@/app/pokedex/components/pokemon-grid"
+import { FamilyPokedexGrid } from './components/family-pokedex-grid'
 
 // Define PokemonWithEntry type locally since it's only used here
 interface PokemonWithEntry extends Pokemon {
@@ -211,11 +213,22 @@ export default async function ProtectedPage() {
               </TabsContent>
 
               <TabsContent value="pokedex">
-                <PokedexTable 
-                  entries={[]}
-                  totalCaught={dashboardData.pokemonStats?.totalCaught || 0}
-                  totalAvailable={151}
-                />
+                <div className="space-y-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-primary">
+                        Family Pokédex
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Track and manage your family's Pokémon collection
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-primary">
+                      {dashboardData.pokemonStats?.totalCaught || 0} / 151 Caught
+                    </Badge>
+                  </div>
+                  <FamilyPokedexGrid familyId={user.id} />
+                </div>
               </TabsContent>
 
               <TabsContent value="shop">

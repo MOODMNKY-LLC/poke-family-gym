@@ -2,97 +2,86 @@
 
 import { useState, useEffect } from "react"
 import { PokemonClient, Pokemon } from "pokenode-ts"
-import { PokemonCard } from "./pokemon-card"
+import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { ChevronLeft, ChevronRight, Search } from "lucide-react"
-import { ViewSwitcher } from "./view-switcher"
-import { PokemonTable } from "./pokemon-table"
-import { PokemonKanban } from "./pokemon-kanban"
-import { PokemonStatsGrid } from "./pokemon-stats-grid"
-import type { ViewMode } from "./view-switcher"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { ViewSwitcher } from "@/app/pokedex/components/view-switcher"
+import type { ViewMode } from "@/app/pokedex/components/view-switcher"
+import { PokemonCard } from "./family-pokemon-card"
+import { PokemonTable } from "@/app/pokedex/components/pokemon-table"
+import { PokemonKanban } from "@/app/pokedex/components/pokemon-kanban"
+import { PokemonStatsGrid } from "@/app/pokedex/components/pokemon-stats-grid"
 
 const POKEMON_PER_PAGE = 20
-const POKEMON_GENERATIONS = {
-  'Gen I': { start: 1, end: 151 },
-  'Gen II': { start: 152, end: 251 },
-  'Gen III': { start: 252, end: 386 },
-  'Gen IV': { start: 387, end: 493 },
-  'Gen V': { start: 494, end: 649 },
-  'Gen VI': { start: 650, end: 721 },
-  'Gen VII': { start: 722, end: 809 },
-  'Gen VIII': { start: 810, end: 905 },
-  'Gen IX': { start: 906, end: 1010 },
-} as const
 
-interface PokemonGridProps {
-  initialPokemon?: Pokemon[]
+interface FamilyPokedexGridProps {
+  familyId: string
 }
 
-export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
-  const [pokemon, setPokemon] = useState<Pokemon[]>(initialPokemon || [])
-  const [filteredPokemon, setFilteredPokemon] = useState<Pokemon[]>(initialPokemon || [])
-  const [isLoading, setIsLoading] = useState(!initialPokemon)
+export function FamilyPokedexGrid({ familyId }: FamilyPokedexGridProps) {
+  const [pokemon, setPokemon] = useState<Pokemon[]>([])
+  const [filteredPokemon, setFilteredPokemon] = useState<Pokemon[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [currentGen, setCurrentGen] = useState<keyof typeof POKEMON_GENERATIONS>('Gen I')
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
+  const supabase = createClient()
 
-  // Calculate total pages for current generation
+  // Calculate total pages
   const totalPokemon = filteredPokemon.length
   const totalPages = Math.ceil(totalPokemon / POKEMON_PER_PAGE)
 
   useEffect(() => {
-    if (initialPokemon) return // Skip fetching if we have initial Pokémon
-
-    async function fetchPokemon() {
+    async function fetchFamilyPokemon() {
       try {
-        setIsLoading(true)
+        // Fetch family's Pokédex entries
+        const { data: pokedexEntries } = await supabase
+          .from('family_pokedex')
+          .select('*')
+          .eq('family_id', familyId)
+
+        if (!pokedexEntries) return
+
+        // Fetch Pokémon data for each entry
         const api = new PokemonClient()
-        
-        const { start, end } = POKEMON_GENERATIONS[currentGen]
         const pokemonList = await Promise.all(
-          Array.from({ length: end - start + 1 }, (_, i) =>
-            api.getPokemonById(start + i)
-          )
+          pokedexEntries.map(async (entry) => {
+            const pokemon = await api.getPokemonById(entry.pokemon_form_id)
+            return {
+              ...pokemon,
+              nickname: entry.nickname,
+              caught_at: entry.first_caught_at,
+              caught_count: entry.caught_count,
+              is_favorite: entry.is_favorite
+            }
+          })
         )
-        
+
         setPokemon(pokemonList)
         setFilteredPokemon(pokemonList)
-      } catch (err) {
-        setError("Failed to fetch Pokemon")
-        console.error(err)
+      } catch (error) {
+        console.error('Error fetching family Pokémon:', error)
+        setError("Failed to fetch your Pokémon")
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchPokemon()
-  }, [currentGen, initialPokemon])
+    fetchFamilyPokemon()
+  }, [familyId])
 
   // Handle search
   useEffect(() => {
     const filtered = pokemon.filter(p => 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p as any).nickname?.toLowerCase().includes(searchQuery.toLowerCase())
     )
     setFilteredPokemon(filtered)
     setPage(1) // Reset to first page when search changes
   }, [searchQuery, pokemon])
-
-  const handleGenChange = (value: keyof typeof POKEMON_GENERATIONS) => {
-    setCurrentGen(value)
-    setPage(1)
-    setSearchQuery("") // Clear search when changing generation
-  }
 
   // Get current page of Pokemon
   const getCurrentPagePokemon = () => {
@@ -128,35 +117,14 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
 
   return (
     <div className="space-y-6">
-      {/* Controls Row - Keep outside ScrollArea */}
+      {/* Controls Row */}
       <div className="flex flex-col sm:flex-row gap-4">
-        {!initialPokemon && (
-          <Select
-            value={currentGen}
-            onValueChange={(value) => {
-              setCurrentGen(value as keyof typeof POKEMON_GENERATIONS)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.keys(POKEMON_GENERATIONS).map((gen) => (
-                <SelectItem key={gen} value={gen}>
-                  {gen}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
         <ViewSwitcher currentView={viewMode} onViewChange={setViewMode} />
 
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search Pokemon..."
+            placeholder="Search by name or nickname..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 w-full"
@@ -197,13 +165,13 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
         )}
       </div>
 
-      {/* Wrap the content in ScrollArea */}
+      {/* Content Area */}
       <ScrollArea className="h-[calc(100vh-24rem)] rounded-lg border bg-card">
         <div className="p-4">
           {isLoading ? (
             <div className="flex justify-center items-center min-h-[200px]">
               <div className="animate-pulse text-muted-foreground">
-                Loading Pokemon...
+                Loading your Pokémon...
               </div>
             </div>
           ) : error ? (
@@ -212,7 +180,10 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
             </div>
           ) : filteredPokemon.length === 0 ? (
             <div className="flex justify-center items-center min-h-[200px] text-muted-foreground">
-              No Pokemon found matching "{searchQuery}"
+              {searchQuery 
+                ? `No Pokémon found matching "${searchQuery}"`
+                : "Your Pokédex is empty. Start catching some Pokémon!"
+              }
             </div>
           ) : (
             renderPokemonView()
