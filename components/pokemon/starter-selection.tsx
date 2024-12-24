@@ -5,14 +5,6 @@ import { PokemonClient } from "pokenode-ts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,6 +55,9 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
   useEffect(() => {
     async function fetchStarters() {
       setIsLoading(true)
+      setSelectedStarter(null)
+      setNickname("")
+      
       try {
         const api = new PokemonClient()
         const starterIds = STARTER_POKEMON[generation as keyof typeof STARTER_POKEMON]
@@ -115,7 +110,7 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
     }
 
     fetchStarters()
-  }, [generation]) // Re-fetch when generation changes
+  }, [generation])
 
   const handleStarterSelect = (starter: StarterPokemon) => {
     setSelectedStarter(starter)
@@ -125,10 +120,7 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
   const handleConfirmSelection = () => {
     if (!selectedStarter || !nickname.trim()) return
     setIsSelecting(true)
-    setTimeout(() => {
-      onSelect(selectedStarter.id, nickname)
-      setIsSelecting(false)
-    }, 500)
+    onSelect(selectedStarter.id, nickname)
   }
 
   return (
