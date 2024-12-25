@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { createClient, type FamilyMember } from '@/lib/supabase/client'
 import { v4 as uuidv4 } from 'uuid'
+import Link from 'next/link'
 
 interface FileUpload {
   data: string
@@ -51,14 +52,7 @@ interface Message {
 
 export function PokeDexter() {
   const { theme } = useTheme()
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: "Hi! I'm PokéDexter, your personal Pokémon assistant. I can help you learn about Pokémon, battle strategies, and manage your family gym. What would you like to know?",
-      role: 'assistant',
-      timestamp: new Date().toISOString()
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chatId] = useState(() => uuidv4())
@@ -82,8 +76,28 @@ export function PokeDexter() {
   const audioChunksRef = useRef<Blob[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  function getAvatarUrl(member: FamilyMember) {
-    if (!member.avatar_url) return '/placeholder-avatar.png'
+  // Add initial welcome message when no member is selected
+  useEffect(() => {
+    if (!selectedMember) {
+      setMessages([{
+        id: '1',
+        content: "Hi! I'm PokéDexter, your personal Pokémon assistant. Select a family member to chat with their personal AI agent, or chat with me for general assistance!",
+        role: 'assistant',
+        timestamp: new Date().toISOString()
+      }])
+    } else {
+      // Clear messages when switching members
+      setMessages([{
+        id: '1',
+        content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent. How can I help you today?`,
+        role: 'assistant',
+        timestamp: new Date().toISOString()
+      }])
+    }
+  }, [selectedMember])
+
+  function getAvatarUrl(member: FamilyMember): string {
+    if (!member.avatar_url) return '/images/pokeball-light.svg'
     
     const supabase = createClient()
     const { data } = supabase
@@ -94,7 +108,7 @@ export function PokeDexter() {
     return data.publicUrl
   }
 
-  function getPokeBallAvatar() {
+  function getPokeBallAvatar(): string {
     return theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'
   }
 
@@ -138,21 +152,12 @@ export function PokeDexter() {
         }
 
         // Transform members to include full avatar URLs
-        const membersWithAvatars = members?.map(member => {
-          let publicUrl = null
-          if (member.avatar_url) {
-            const { data } = supabase
-              .storage
-              .from('avatars')
-              .getPublicUrl(member.avatar_url)
-            publicUrl = data.publicUrl
-          }
-          
-          return {
-            ...member,
-            avatar_url: publicUrl
-          }
-        }) || []
+        const membersWithAvatars = members?.map(member => ({
+          ...member,
+          avatar_url: member.avatar_url 
+            ? supabase.storage.from('avatars').getPublicUrl(member.avatar_url).data.publicUrl || null
+            : null
+        })) || []
 
         console.log('Fetched family members:', membersWithAvatars)
         setFamilyMembers(membersWithAvatars)
@@ -379,7 +384,7 @@ export function PokeDexter() {
     }
   }
 
-  // Update handleSendMessage to include voice messages
+  // Update handleSendMessage to use the selected member's chatflow
   async function handleSendMessage(e?: React.FormEvent, voiceMessage?: Message) {
     e?.preventDefault()
     const content = inputMessage.trim()
@@ -407,6 +412,7 @@ export function PokeDexter() {
         body: JSON.stringify({ 
           message: userMessage.content,
           chatId,
+          chatflowId: selectedMember?.chatflow_id, // Use selected member's chatflow if available
           history: messages.map(msg => ({
             role: msg.role,
             content: msg.content,
@@ -430,7 +436,6 @@ export function PokeDexter() {
       
       setMessages(prev => [...prev, assistantMessage])
       
-      // Speak the assistant's response if auto playback is enabled
       if (autoPlayTTS && isTTSEnabled) {
         speakText(data.message)
       }
@@ -441,7 +446,9 @@ export function PokeDexter() {
       
       const errorAssistantMessage: Message = {
         id: uuidv4(),
-        content: "Sorry, I'm having trouble connecting to my Pokédex right now. Please try again later!",
+        content: selectedMember 
+          ? `Sorry, I'm having trouble connecting to ${selectedMember.display_name}'s AI agent right now. Please try again later!`
+          : "Sorry, I'm having trouble connecting to my Pokédex right now. Please try again later!",
         role: 'assistant',
         timestamp: new Date().toISOString(),
         error: true
@@ -460,7 +467,7 @@ export function PokeDexter() {
     })
   }
 
-  function getStatusColor(status: string) {
+  function getStatusColor(status: string | undefined): string {
     switch (status?.toLowerCase()) {
       case 'online':
         return 'bg-green-500'
@@ -495,12 +502,18 @@ export function PokeDexter() {
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src={getPokeBallAvatar()}
-              alt="PokéDexter"
+              src={selectedMember ? selectedMember.avatar_url || getPokeBallAvatar() : getPokeBallAvatar()}
+              alt={selectedMember ? selectedMember.display_name : 'PokéDexter'}
               className="w-10 h-10 rounded-full object-cover"
+              onError={(e) => {
+                const img = e.target as HTMLImageElement
+                img.src = getPokeBallAvatar()
+              }}
             />
             <div>
-              <h3 className="font-medium">PokéDexter</h3>
+              <h3 className="font-medium">
+                {selectedMember ? `${selectedMember.display_name}'s AI Agent` : 'PokéDexter'}
+              </h3>
               <p className="text-sm text-muted-foreground">Active now</p>
             </div>
           </div>
@@ -534,8 +547,15 @@ export function PokeDexter() {
             >
               {isTTSEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
-            <Button variant="ghost" size="icon">
-              <Info className="h-4 w-4" />
+            <Button 
+              variant="ghost" 
+              size="icon"
+              asChild
+              title="PokéDexter Control Panel"
+            >
+              <Link href="/protected/admin">
+                <Info className="h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </div>
@@ -575,12 +595,12 @@ export function PokeDexter() {
                   >
                     <div className="relative">
                       <img
-                        src={member.avatar_url || '/placeholder-avatar.png'}
+                        src={member.avatar_url || getPokeBallAvatar()}
                         alt={member.display_name}
                         className="w-10 h-10 rounded-full object-cover bg-muted"
                         onError={(e) => {
                           const img = e.target as HTMLImageElement
-                          img.src = '/placeholder-avatar.png'
+                          img.src = getPokeBallAvatar()
                         }}
                       />
                       <span 
@@ -709,12 +729,12 @@ export function PokeDexter() {
                     </div>
                     {message.role === 'user' && selectedMember && (
                       <img
-                        src={selectedMember.avatar_url || '/placeholder-avatar.png'}
+                        src={selectedMember.avatar_url || getPokeBallAvatar()}
                         alt={selectedMember.display_name}
                         className="w-8 h-8 rounded-full object-cover bg-muted"
                         onError={(e) => {
                           const img = e.target as HTMLImageElement
-                          img.src = '/placeholder-avatar.png'
+                          img.src = getPokeBallAvatar()
                         }}
                       />
                     )}

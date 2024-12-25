@@ -39,14 +39,27 @@ export interface FamilyMember {
   display_name: string
   full_name: string
   role_id: number
-  birth_date?: string | null
-  favorite_color?: string | null
-  current_status: string
-  avatar_url?: string | null
-  pin?: string | null
+  birth_date?: string
+  favorite_color?: string
+  current_status?: string
+  avatar_url: string | null
+  pin?: string
   created_at: string
   updated_at: string
-  starter_pokemon_form_id?: number | null
-  starter_pokemon_nickname?: string | null
-  starter_pokemon_obtained_at?: string | null
+  starter_pokemon_form_id?: number
+  starter_pokemon_nickname?: string
+  starter_pokemon_obtained_at?: string
+  token_balance?: number
+  personal_motto?: string
+  chatflow_id?: string
+  starter_pokemon_friendship?: number
+  starter_pokemon_nature?: string
+  starter_pokemon_move_1?: string
+  starter_pokemon_move_2?: string
+  starter_pokemon_move_3?: string
+  starter_pokemon_move_4?: string
+  starter_pokemon_ribbons?: string[]
+  experience_points?: number
+  trainer_class?: string
+  badges_earned?: number
 } 

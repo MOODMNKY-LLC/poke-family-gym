@@ -1,98 +1,61 @@
 import { NextResponse } from 'next/server'
 
-const FLOWISE_API_URL = process.env.NEXT_PUBLIC_FLOWISE_API_URL || process.env.FLOWISE_API_URL
-const FLOWISE_API_KEY = process.env.NEXT_PUBLIC_FLOWISE_API_KEY || process.env.FLOWISE_API_KEY
-const FLOWISE_CHATFLOW_ID = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID || process.env.FLOWISE_CHATFLOW_ID
-
 interface ChatRequest {
   message: string
   chatId: string
-  history: {
+  chatflowId?: string
+  history: Array<{
     role: 'user' | 'assistant'
     content: string
-    uploads?: {
+    uploads?: Array<{
       data: string
-      type: 'file'
+      type: string
       name: string
       mime: string
-    }[]
-  }[]
+    }>
+  }>
 }
 
 export async function POST(request: Request) {
   try {
-    const { message, chatId, history } = await request.json() as ChatRequest
-    
-    if (!FLOWISE_API_URL || !FLOWISE_API_KEY || !FLOWISE_CHATFLOW_ID) {
-      throw new Error('Missing Flowise configuration')
-    }
+    const { message, chatId, chatflowId, history } = await request.json() as ChatRequest
 
-    // Get the latest message's uploads if any
-    const latestMessage = history[history.length - 1]
-    const uploads = latestMessage?.uploads || []
+    // Use the provided chatflowId or fall back to the default
+    const flowiseApiUrl = chatflowId 
+      ? `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/prediction/${chatflowId}`
+      : `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/prediction/${process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID}`
 
-    // Format history for Flowise
-    const formattedHistory = history.slice(0, -1).map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }))
-
-    // Prepare the request body
-    const requestBody: any = {
-      question: message,
-      history: formattedHistory,
-      chatId,
-      overrideConfig: {
-        returnSourceDocuments: true
-      }
-    }
-
-    // Add uploads if present
-    if (uploads.length > 0) {
-      requestBody.uploads = uploads.map(upload => ({
-        data: upload.data,
-        type: upload.type,
-        name: upload.name,
-        mime: upload.mime
-      }))
-    }
-
-    console.log('Sending request to Flowise:', {
-      url: `${FLOWISE_API_URL}/api/v1/prediction/${FLOWISE_CHATFLOW_ID}`,
-      hasUploads: uploads.length > 0,
-      historyLength: formattedHistory.length
-    })
-
-    // Send request to Flowise API
-    const flowiseResponse = await fetch(`${FLOWISE_API_URL}/api/v1/prediction/${FLOWISE_CHATFLOW_ID}`, {
+    const response = await fetch(flowiseApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${FLOWISE_API_KEY}`
+        'Authorization': `Bearer ${process.env.FLOWISE_API_KEY}`
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        question: message,
+        history: history.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          uploads: msg.uploads
+        })),
+        chatId,
+        overrideConfig: {
+          returnSourceDocuments: true
+        }
+      })
     })
 
-    if (!flowiseResponse.ok) {
-      const errorText = await flowiseResponse.text()
-      console.error('Flowise API error:', {
-        status: flowiseResponse.status,
-        statusText: flowiseResponse.statusText,
-        error: errorText
-      })
-      throw new Error(`Flowise API error: ${flowiseResponse.status} ${flowiseResponse.statusText}`)
+    if (!response.ok) {
+      throw new Error('Failed to get response from Flowise')
     }
 
-    const data = await flowiseResponse.json()
-    
-    return NextResponse.json({ 
-      message: data.text,
-      sourceDocuments: data.sourceDocuments
-    })
+    const data = await response.json()
+
+    return NextResponse.json({ message: data.text })
   } catch (error) {
-    console.error('Chat API error:', error)
+    console.error('Chat error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to process chat message' },
+      { error: 'Failed to process chat message' },
       { status: 500 }
     )
   }
