@@ -44,19 +44,58 @@ export const FamilyMembersAPI = {
 
   // Update a family member's chatflow assignment
   async updateChatflowAssignment(memberId: string, chatflowId: string | null): Promise<void> {
+    if (!memberId) {
+      throw new Error('Member ID is required')
+    }
+
     try {
       const supabase = createClient()
-      const { error } = await supabase
+      
+      console.debug('Updating chatflow assignment:', {
+        memberId,
+        chatflowId,
+        timestamp: new Date().toISOString()
+      })
+
+      const { data, error } = await supabase
         .from('family_members')
         .update({ 
           chatflow_id: chatflowId,
-          updated_at: new Date().toISOString() 
+          updated_at: new Date().toISOString()
         })
         .eq('id', memberId)
+        .select()
+        .single()
 
-      if (error) throw error
-    } catch (error) {
-      console.error('Error updating chatflow assignment:', error)
+      console.debug('Update result:', {
+        success: !!data,
+        error,
+        member: data,
+        timestamp: new Date().toISOString()
+      })
+
+      if (error) {
+        // Handle specific error cases
+        if (error.code === '42501') {
+          throw new Error('You do not have permission to update this family member')
+        }
+        if (error.code === 'P0001' && error.message.includes('does not exist')) {
+          throw new Error('The selected chatflow does not exist')
+        }
+        throw error
+      }
+
+    } catch (error: unknown) {
+      console.error('Error updating chatflow assignment:', {
+        memberId,
+        chatflowId,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        } : error,
+        timestamp: new Date().toISOString()
+      })
       throw error
     }
   },

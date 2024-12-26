@@ -535,26 +535,36 @@ export function PokeDexterControl() {
     try {
       // Get the selected chatflow for this member
       const selectedChatflowId = selectedChatflows[member.id]
-      const selectedChatflow = selectedChatflowId ? chatflows.find(cf => cf.id === selectedChatflowId) : undefined
       
       console.debug('Starting chatflow sync:', {
         memberId: member.id,
         memberName: member.display_name,
         currentChatflowId: member.chatflow_id,
-        newChatflowId: selectedChatflow?.id,
+        newChatflowId: selectedChatflowId,
         timestamp: new Date().toISOString()
       })
 
       // Update syncing state
       setSyncingMembers(prev => ({ ...prev, [member.id]: true }))
 
+      // Verify chatflow exists and is deployed if assigning
+      if (selectedChatflowId) {
+        const chatflow = chatflows.find(cf => cf.id === selectedChatflowId)
+        if (!chatflow) {
+          throw new Error('Selected chatflow not found')
+        }
+        if (!chatflow.deployed) {
+          throw new Error('Selected chatflow is not deployed')
+        }
+      }
+
       // Update the chatflow assignment
-      await FamilyMembersAPI.updateChatflowAssignment(member.id, selectedChatflow?.id || null)
+      await FamilyMembersAPI.updateChatflowAssignment(member.id, selectedChatflowId)
 
       // Show success toast
       toast.success(
-        selectedChatflow
-          ? `Assigned ${selectedChatflow.name} to ${member.display_name}`
+        selectedChatflowId
+          ? `Assigned chatflow to ${member.display_name}`
           : `Removed chatflow from ${member.display_name}`
       )
 
@@ -587,7 +597,7 @@ export function PokeDexterControl() {
       }))
 
     } finally {
-      // Reset syncing state
+      // Clear syncing state
       setSyncingMembers(prev => ({ ...prev, [member.id]: false }))
     }
   }

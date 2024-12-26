@@ -5,10 +5,13 @@ import { AddFamilyMemberDialog } from './add-family-member-dialog'
 import { Button } from "@/components/ui/button"
 import { Settings } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
+import { getPokeBallImage } from "@/lib/utils"
+import { useTheme } from "next-themes"
 import type { Role } from '@/types/types'
-import { PokeBall } from "@/components/icons/pokeball"
 import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from 'react'
 
 interface AnimatedHeaderProps {
   familyName: string
@@ -27,6 +30,16 @@ export function AnimatedHeader({
   userId,
   roles
 }: AnimatedHeaderProps) {
+  const { theme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Prevent hydration mismatch by using default light theme image during SSR
+  const pokeBallImage = mounted ? getPokeBallImage(theme) : '/images/pokeball-light.svg'
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -55,9 +68,15 @@ export function AnimatedHeader({
             <br />
             <span className="text-primary relative inline-flex items-center gap-2 lg:gap-4">
               Poké Gym
-              <PokeBall 
-                className="w-6 h-6 lg:w-8 lg:h-8 text-primary inline-block transition-transform hover:rotate-180" 
-              />
+              <div className="relative w-6 h-6 lg:w-8 lg:h-8 transition-transform hover:rotate-180">
+                <Image
+                  src={pokeBallImage}
+                  alt="PokéBall"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
             </span>
           </h1>
           {motto && (

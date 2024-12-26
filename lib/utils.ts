@@ -6,8 +6,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function getAvatarUrl(path: string | null): string {
-  if (!path) return '/images/pokeball-light.svg'
+export function getPokeBallImage(theme?: string | null): string {
+  return theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'
+}
+
+export function getAvatarUrl(path: string | null, theme?: string): string {
+  if (!path) return getPokeBallImage(theme)
   
   // If it's already a full URL, return it
   if (path.startsWith('http')) return path
@@ -25,5 +29,5 @@ export function getAvatarUrl(path: string | null): string {
     .from('avatars')
     .getPublicUrl(cleanPath)
 
-  return publicUrl || '/images/pokeball-light.svg'
+  return publicUrl || getPokeBallImage(theme)
 }

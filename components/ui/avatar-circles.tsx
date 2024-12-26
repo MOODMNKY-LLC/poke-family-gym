@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 interface Avatar {
   imageUrl: string;
   profileUrl: string;
+  onClick?: () => void;
 }
+
 interface AvatarCirclesProps {
   className?: string;
   numPeople?: number;
@@ -21,22 +23,20 @@ const AvatarCircles = ({
 }: AvatarCirclesProps) => {
   return (
     <div className={cn("z-10 flex -space-x-4 rtl:space-x-reverse", className)}>
-      {avatarUrls.map((url, index) => (
-        <a
+      {avatarUrls.map((avatar, index) => (
+        <div
           key={index}
-          href={url.profileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          onClick={avatar.onClick}
+          className="cursor-pointer"
         >
           <img
-            key={index}
             className="h-10 w-10 rounded-full border-2 border-white dark:border-gray-800"
-            src={url.imageUrl}
+            src={avatar.imageUrl}
             width={40}
             height={40}
             alt={`Avatar ${index + 1}`}
           />
-        </a>
+        </div>
       ))}
       {(numPeople ?? 0) > 0 && (
         <a

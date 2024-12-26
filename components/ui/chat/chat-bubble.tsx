@@ -26,6 +26,27 @@ const chatBubbleVariant = cva(
   },
 );
 
+// Message bubble variants
+const chatBubbleMessageVariants = cva(
+  "rounded-2xl px-4 py-2.5 min-w-[60px] text-sm relative flex flex-col gap-1",
+  {
+    variants: {
+      variant: {
+        received: "bg-muted text-muted-foreground",
+        sent: "bg-primary text-primary-foreground",
+      },
+      layout: {
+        default: "",
+        ai: "rounded-t-2xl rounded-br-2xl rounded-bl-lg shadow-sm",
+      },
+    },
+    defaultVariants: {
+      variant: "received",
+      layout: "default",
+    },
+  }
+);
+
 interface ChatBubbleProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof chatBubbleVariant> {}
@@ -49,11 +70,10 @@ const ChatBubble = React.forwardRef<HTMLDivElement, ChatBubbleProps>(
           : child,
       )}
     </div>
-  ),
+  )
 );
 ChatBubble.displayName = "ChatBubble";
 
-// ChatBubbleAvatar
 interface ChatBubbleAvatarProps {
   src?: string;
   fallback?: string;
@@ -64,31 +84,25 @@ const ChatBubbleAvatar: React.FC<ChatBubbleAvatarProps> = ({
   src,
   fallback,
   className,
-}) => (
-  <Avatar className={className}>
-    <AvatarImage src={src} alt="Avatar" />
-    <AvatarFallback>{fallback}</AvatarFallback>
-  </Avatar>
-);
+}) => {
+  const [imageError, setImageError] = React.useState(false);
 
-// ChatBubbleMessage
-const chatBubbleMessageVariants = cva("p-4", {
-  variants: {
-    variant: {
-      received:
-        "bg-secondary text-secondary-foreground rounded-r-lg rounded-tl-lg",
-      sent: "bg-primary text-primary-foreground rounded-l-lg rounded-tr-lg",
-    },
-    layout: {
-      default: "",
-      ai: "border-t w-full rounded-none bg-transparent",
-    },
-  },
-  defaultVariants: {
-    variant: "received",
-    layout: "default",
-  },
-});
+  return (
+    <Avatar className={cn("h-8 w-8", className)}>
+      {src && !imageError ? (
+        <AvatarImage 
+          src={src} 
+          onError={() => setImageError(true)}
+          alt={fallback || "Avatar"}
+        />
+      ) : (
+        <AvatarFallback delayMs={0}>
+          {fallback}
+        </AvatarFallback>
+      )}
+    </Avatar>
+  );
+};
 
 interface ChatBubbleMessageProps
   extends React.HTMLAttributes<HTMLDivElement>,
@@ -96,51 +110,47 @@ interface ChatBubbleMessageProps
   isLoading?: boolean;
 }
 
-const ChatBubbleMessage = React.forwardRef<
-  HTMLDivElement,
-  ChatBubbleMessageProps
->(
-  (
-    { className, variant, layout, isLoading = false, children, ...props },
-    ref,
-  ) => (
+const ChatBubbleMessage = React.forwardRef<HTMLDivElement, ChatBubbleMessageProps>(
+  ({ className, variant, layout, isLoading, children, ...props }, ref) => (
     <div
-      className={cn(
-        chatBubbleMessageVariants({ variant, layout, className }),
-        "break-words max-w-full whitespace-pre-wrap",
-      )}
+      className={cn(chatBubbleMessageVariants({ variant, layout, className }))}
       ref={ref}
       {...props}
     >
-      {isLoading ? (
-        <div className="flex items-center space-x-2">
-          <MessageLoading />
-        </div>
-      ) : (
-        children
-      )}
+      <div className="flex-1 break-words">
+        {isLoading ? <MessageLoading /> : children}
+      </div>
     </div>
-  ),
+  )
 );
 ChatBubbleMessage.displayName = "ChatBubbleMessage";
 
-// ChatBubbleTimestamp
 interface ChatBubbleTimestampProps
   extends React.HTMLAttributes<HTMLDivElement> {
   timestamp: string;
+  variant?: "sent" | "received";
 }
 
 const ChatBubbleTimestamp: React.FC<ChatBubbleTimestampProps> = ({
   timestamp,
+  variant = "received",
   className,
   ...props
 }) => (
-  <div className={cn("text-xs mt-2 text-right", className)} {...props}>
+  <div
+    className={cn(
+      "text-[10px] select-none",
+      variant === "sent" 
+        ? "text-primary-foreground/80" 
+        : "text-muted-foreground/80",
+      className
+    )}
+    {...props}
+  >
     {timestamp}
   </div>
 );
 
-// ChatBubbleAction
 type ChatBubbleActionProps = ButtonProps & {
   icon: React.ReactNode;
 };
@@ -150,13 +160,16 @@ const ChatBubbleAction: React.FC<ChatBubbleActionProps> = ({
   onClick,
   className,
   variant = "ghost",
-  size = "icon",
+  size = "sm",
   ...props
 }) => (
   <Button
     variant={variant}
     size={size}
-    className={className}
+    className={cn(
+      "opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7",
+      className
+    )}
     onClick={onClick}
     {...props}
   >
@@ -170,33 +183,29 @@ interface ChatBubbleActionWrapperProps
   className?: string;
 }
 
-const ChatBubbleActionWrapper = React.forwardRef<
-  HTMLDivElement,
-  ChatBubbleActionWrapperProps
->(({ variant, className, children, ...props }, ref) => (
+const ChatBubbleActionWrapper: React.FC<ChatBubbleActionWrapperProps> = ({
+  variant = "received",
+  className,
+  children,
+  ...props
+}) => (
   <div
-    ref={ref}
     className={cn(
-      "absolute top-1/2 -translate-y-1/2 flex opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-      variant === "sent"
-        ? "-left-1 -translate-x-full flex-row-reverse"
-        : "-right-1 translate-x-full",
-      className,
+      "absolute bottom-0 flex gap-0.5",
+      variant === "sent" ? "left-0 -translate-x-full pl-2" : "right-0 translate-x-full pr-2",
+      className
     )}
     {...props}
   >
     {children}
   </div>
-));
-ChatBubbleActionWrapper.displayName = "ChatBubbleActionWrapper";
+);
 
 export {
   ChatBubble,
   ChatBubbleAvatar,
   ChatBubbleMessage,
   ChatBubbleTimestamp,
-  chatBubbleVariant,
-  chatBubbleMessageVariants,
   ChatBubbleAction,
   ChatBubbleActionWrapper,
 };

@@ -1,28 +1,37 @@
+begin;
+
 -- Create a function to validate chatflow exists
 create or replace function public.validate_chatflow_exists()
-returns trigger as $$
+returns trigger 
+language plpgsql
+security definer
+as $$
 begin
   -- If chatflow_id is null, allow the update (removing assignment)
   if new.chatflow_id is null then
     return new;
   end if;
 
-  -- Check if the chatflow exists
+  -- Check if the chatflow exists and is deployed
   if not exists (
     select 1 
     from chat_flow 
     where id = new.chatflow_id
+    and deployed = true
   ) then
-    raise exception 'Chatflow with ID % does not exist', new.chatflow_id;
+    raise exception 'Chatflow with ID % does not exist or is not deployed', new.chatflow_id;
   end if;
 
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 -- Create a function to log chatflow assignments
 create or replace function public.log_chatflow_assignment()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+as $$
 begin
   insert into activity_events (
     family_id,
@@ -43,7 +52,7 @@ begin
   );
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 -- Create trigger to validate chatflow before assignment
 drop trigger if exists validate_chatflow_assignment on public.family_members;
@@ -82,5 +91,7 @@ create policy "Users can update chatflow assignments for their family members"
     )
   );
 
-comment on function public.validate_chatflow_exists is 'Validates that a chatflow exists before it can be assigned to a family member';
-comment on function public.log_chatflow_assignment is 'Logs chatflow assignment changes to the activity_events table'; 
+comment on function public.validate_chatflow_exists is 'Validates that a chatflow exists and is deployed before it can be assigned to a family member';
+comment on function public.log_chatflow_assignment is 'Logs chatflow assignment changes to the activity_events table';
+
+commit; 

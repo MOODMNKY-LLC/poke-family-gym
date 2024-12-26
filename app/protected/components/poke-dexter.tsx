@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, getPokeBallImage } from '../../../lib/utils'
 import { 
   Bot, 
   User, 
   AlertCircle, 
   Info, 
   ImagePlus, 
-  Paperclip, 
   Mic,
   MicOff,
   Send,
@@ -16,7 +15,17 @@ import {
   Volume2,
   VolumeX,
   Menu,
-  X
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCw,
+  Settings,
+  Archive,
+  Gamepad2,
+  Settings2,
+  LogOut,
+  Square,
+  Play
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { 
@@ -44,6 +53,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
+import AvatarCircles from '@/components/ui/avatar-circles'
 
 interface FileUpload {
   data: string
@@ -54,12 +64,27 @@ interface FileUpload {
 
 interface Message {
   id: string
-  content: string
   role: 'user' | 'assistant'
-  timestamp: string
+  content: string
+  createdAt: string
+  image?: string
   error?: boolean
   uploads?: FileUpload[]
   sourceDocuments?: any[]
+}
+
+interface MessageBubbleProps {
+  message: Message
+  isUser: boolean
+  isSpeaking: boolean
+  audioRef: React.RefObject<HTMLAudioElement | null>
+  speakText: (text: string) => Promise<void>
+  setIsSpeaking: (speaking: boolean) => void
+  chatId: string
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setError: (error: string | null) => void
+  theme?: string
+  selectedMember?: FamilyMember | null
 }
 
 interface PokeChatFlow {
@@ -227,78 +252,138 @@ function FormattedMessage({ content }: { content: string }) {
   )
 }
 
-function MessageBubble({ 
-  message, 
+const MessageBubble = ({
+  message,
   isUser,
   isSpeaking,
   audioRef,
   speakText,
-  setIsSpeaking
-}: { 
-  message: Message; 
-  isUser: boolean;
-  isSpeaking: boolean;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
-  speakText: (text: string) => Promise<void>;
-  setIsSpeaking: (speaking: boolean) => void;
-}) {
-  const timestamp = new Date(message.timestamp).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
+  setIsSpeaking,
+  chatId,
+  setMessages,
+  setError,
+  theme,
+  selectedMember,
+}: MessageBubbleProps) => {
+  const [isHelpful, setIsHelpful] = useState<boolean | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleFeedback = async (helpful: boolean) => {
+    setIsLoading(true)
+    setIsHelpful(helpful)
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          messageId: message.id,
+          helpful,
+        }),
+      })
+    } catch (error) {
+      console.error('Error submitting feedback:', error)
+      setError('Failed to submit feedback. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
-    <ChatBubble 
-      variant={isUser ? "sent" : "received"}
-      className={cn(message.error && "bg-destructive/10")}
-    >
+    <div className={cn('flex w-full gap-3', isUser ? 'justify-end' : 'justify-start')}>
       {!isUser && (
-        <ChatBubbleAvatar 
-          fallback="PD"
-          className="h-8 w-8 flex items-center justify-center"
+        <img
+          src={theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'}
+          alt="PokéDexter"
+          className="h-10 w-10 rounded-full"
         />
       )}
-      
-      <div className="flex flex-col gap-1">
-        <ChatBubbleMessage>
-          <FormattedMessage content={message.content} />
+      <div className={cn('flex flex-col min-w-0 max-w-[85%]', isUser ? 'items-end' : 'items-start')}>
+        <div className={cn('flex w-full gap-3', isUser ? 'justify-end' : 'justify-start')}>
+          <div
+            className={cn(
+              'rounded-2xl px-4 py-2 break-words',
+              isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
+            )}
+          >
+            {message.content}
+            {message.image && (
+              <img
+                src={message.image}
+                alt="Uploaded content"
+                className="mt-2 rounded-lg max-w-sm"
+              />
+            )}
+          </div>
+        </div>
+        <div className={cn('flex items-center gap-2 px-2 mt-1', isUser ? 'justify-end' : 'justify-start')}>
+          <div className="text-xs text-muted-foreground">
+            {new Date(message.createdAt).toLocaleTimeString()}
+          </div>
           {!isUser && (
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => speakText(message.content)}
-                disabled={isSpeaking}
+                size="icon"
+                className="h-6 w-6"
+                title="Listen to message"
+                onClick={() => {
+                  if (isSpeaking) {
+                    audioRef.current?.pause()
+                    setIsSpeaking(false)
+                  } else {
+                    speakText(message.content)
+                  }
+                }}
               >
-                {isSpeaking ? <Volume2 className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                {isSpeaking ? (
+                  <Square className="h-3 w-3" />
+                ) : (
+                  <Play className="h-3 w-3" />
+                )}
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (audioRef.current) {
-                    audioRef.current.pause();
-                    setIsSpeaking(false);
-                  }
-                }}
-                disabled={!isSpeaking}
+                size="icon"
+                className="h-6 w-6"
+                title="Mark as helpful"
+                onClick={() => handleFeedback(true)}
+                disabled={isHelpful !== null || isLoading}
               >
-                <VolumeX className="h-4 w-4" />
+                <ThumbsUp
+                  className={cn('h-3 w-3', {
+                    'text-green-500 fill-green-500': isHelpful === true,
+                  })}
+                />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                title="Mark as unhelpful"
+                onClick={() => handleFeedback(false)}
+                disabled={isHelpful !== null || isLoading}
+              >
+                <ThumbsDown
+                  className={cn('h-3 w-3', {
+                    'text-red-500 fill-red-500': isHelpful === false,
+                  })}
+                />
               </Button>
             </div>
           )}
-        </ChatBubbleMessage>
-        <ChatBubbleTimestamp timestamp={timestamp} />
+        </div>
       </div>
-
       {isUser && (
-        <ChatBubbleAvatar 
-          fallback="U"
-          className="h-8 w-8 flex items-center justify-center"
+        <AvatarCircles
+          className="h-10 w-10"
+          avatarUrls={[{
+            imageUrl: selectedMember?.avatar_url || (theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'),
+            profileUrl: '#'
+          }]}
         />
       )}
-    </ChatBubble>
+    </div>
   )
 }
 
@@ -312,9 +397,8 @@ export function PokeDexter() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [isRecording, setIsRecording] = useState(false)
@@ -322,7 +406,7 @@ export function PokeDexter() {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isTTSEnabled, setIsTTSEnabled] = useState(true)
   const [autoPlayTTS, setAutoPlayTTS] = useState(false)
-  const [selectedVoice, setSelectedVoice] = useState<string>('alloy')
+  const [selectedVoice, setSelectedVoice] = useState<string>('echo')
   const openAIVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -331,6 +415,7 @@ export function PokeDexter() {
   const [currentChatflowId, setCurrentChatflowId] = useState<string | null>(null)
   const [socketId, setSocketId] = useState<string | null>(null)
   const socketRef = useRef<any>(null)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
 
   // Add initial welcome message when no member is selected
   useEffect(() => {
@@ -339,7 +424,7 @@ export function PokeDexter() {
         id: '1',
         content: "Hi! I'm PokéDexter, your personal Pokémon assistant. Select a family member to chat with their personal AI agent, or chat with me for general assistance!",
         role: 'assistant',
-        timestamp: new Date().toISOString()
+        createdAt: new Date().toISOString()
       }])
     } else {
       // Use member's chatflow_id if available, otherwise use default
@@ -350,13 +435,13 @@ export function PokeDexter() {
         id: '1',
         content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent${chatflow ? ` (${chatflow.name})` : ''}. How can I help you today?`,
         role: 'assistant',
-        timestamp: new Date().toISOString()
+        createdAt: new Date().toISOString()
       }])
     }
   }, [selectedMember, currentChatflowId, chatflows])
 
   function getAvatarUrl(member: FamilyMember): string {
-    if (!member.avatar_url) return '/images/pokeball-light.svg'
+    if (!member.avatar_url) return theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'
     
     const supabase = createClient()
     const { data } = supabase
@@ -429,88 +514,48 @@ export function PokeDexter() {
     fetchFamilyMembers()
   }, [])
 
-  // Function to handle file selection
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    setSelectedFiles(files)
-    
-    // Convert files to base64
-    const uploads = await Promise.all(
-      files.map(async (file): Promise<FileUpload> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve({
-              data: reader.result as string,
-              type: 'file',
-              name: file.name,
-              mime: file.type
-            })
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(file)
-        })
-      })
-    )
-
-    // Create a message with the uploads
-    if (uploads.length > 0) {
-      const userMessage: Message = {
-        id: uuidv4(),
-        content: `Uploaded ${uploads.length} file${uploads.length > 1 ? 's' : ''}`,
-        role: 'user',
-        timestamp: new Date().toISOString(),
-        uploads
-      }
-      setMessages(prev => [...prev, userMessage])
-      
-      // Clear the file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      setSelectedFiles([])
-    }
-  }
-
   // Function to handle image selection
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
 
-    // Convert images to base64
-    const uploads = await Promise.all(
-      files.map(async (file): Promise<FileUpload> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve({
-              data: reader.result as string,
-              type: 'file',
-              name: file.name,
-              mime: file.type
-            })
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(file)
-        })
-      })
-    )
+    setSelectedFiles(files)
+    setIsLoading(true)
 
-    // Create a message with the image uploads
-    if (uploads.length > 0) {
-      const userMessage: Message = {
+    try {
+      // Create preview message immediately
+      const uploads = await Promise.all(
+        files.map(async (file): Promise<FileUpload> => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              resolve({
+                data: reader.result as string,
+                type: 'file',
+                name: file.name,
+                mime: file.type
+              })
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(file)
+          })
+        })
+      )
+
+      // Add preview message to chat
+      const previewMessage: Message = {
         id: uuidv4(),
-        content: `Uploaded ${uploads.length} image${uploads.length > 1 ? 's' : ''}`,
+        content: '',
         role: 'user',
-        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         uploads
       }
-      setMessages(prev => [...prev, userMessage])
-      
-      // Clear the file input
-      if (imageInputRef.current) {
-        imageInputRef.current.value = ''
-      }
+      setMessages(prev => [...prev, previewMessage])
+    } catch (error) {
+      console.error('Error processing images:', error)
+      setError('Failed to process images')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -551,7 +596,7 @@ export function PokeDexter() {
             id: uuidv4(),
             content: 'Voice message',
             role: 'user',
-            timestamp: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
             uploads: [{
               data: reader.result,
               type: 'file',
@@ -701,16 +746,34 @@ export function PokeDexter() {
     let streamedMessage = ''
     let sourceDocuments: any[] = []
 
-    const userMessage = voiceMessage || {
-      id: uuidv4(),
-      content,
-      role: 'user',
-      timestamp: new Date().toISOString()
-    }
+    // Find the preview message if it exists
+    const lastMessage = messages[messages.length - 1]
+    const isPreview = lastMessage?.role === 'user' && lastMessage?.content === '' && lastMessage?.uploads
 
-    if (!voiceMessage) {
+    let userMessage: Message
+    if (isPreview) {
+      // Update the preview message with the content
+      userMessage = {
+        ...lastMessage,
+        content
+      }
+      setMessages(prev => prev.map(msg => 
+        msg.id === lastMessage.id 
+          ? userMessage
+          : msg
+      ))
+    } else {
+      // Create a new message
+      userMessage = {
+        id: uuidv4(),
+        content,
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        uploads: lastMessage?.uploads
+      }
       setMessages(prev => [...prev, userMessage])
     }
+
     setIsLoading(true)
 
     try {
@@ -719,7 +782,7 @@ export function PokeDexter() {
         throw new Error('No chatflow available')
       }
 
-      // Enhanced request body with analytics and memory config
+      // Enhanced request body with uploads
       const requestBody = {
         question: userMessage.content,
         history: messages.map(msg => ({
@@ -730,7 +793,7 @@ export function PokeDexter() {
           sessionId: chatId,
           returnSourceDocuments: true,
           socketIOClientId: socketId,
-          memoryType: 'zep', // or other memory types
+          memoryType: 'zep',
           memoryWindow: 5,
           analytics: {
             langFuse: {
@@ -759,7 +822,7 @@ export function PokeDexter() {
             id: messageId,
             content: '',
             role: 'assistant',
-            timestamp: new Date().toISOString()
+            createdAt: new Date().toISOString()
           }])
         })
 
@@ -775,7 +838,6 @@ export function PokeDexter() {
         socketRef.current.on('sourceDocuments', (docs: any) => {
           console.debug('Source documents:', docs)
           sourceDocuments = docs
-          // Update message with source documents
           setMessages(prev => prev.map(msg => 
             msg.id === messageId 
               ? { ...msg, sourceDocuments: docs }
@@ -801,7 +863,7 @@ export function PokeDexter() {
         })
       }
 
-      // Make API request with enhanced error handling
+      // Make API request
       const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/prediction/${chatflowId}`, {
         method: 'POST',
         headers: {
@@ -825,7 +887,7 @@ export function PokeDexter() {
           id: uuidv4(),
           content: data.text || data.answer || 'No response received',
           role: 'assistant',
-          timestamp: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
           sourceDocuments: data.sourceDocuments
         }
         setMessages(prev => [...prev, assistantMessage])
@@ -834,7 +896,6 @@ export function PokeDexter() {
           await speakText(assistantMessage.content)
         }
       }
-
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
@@ -843,11 +904,15 @@ export function PokeDexter() {
         id: uuidv4(),
         content: `Error: ${errorMessage}`,
         role: 'assistant',
-        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         error: true
       }])
     } finally {
       setIsLoading(false)
+      setSelectedFiles([])
+      if (imageInputRef.current) {
+        imageInputRef.current.value = ''
+      }
     }
   }
 
@@ -910,27 +975,151 @@ export function PokeDexter() {
   }, [])
 
   return (
-    <div className="flex h-[600px] bg-background border rounded-lg overflow-hidden">
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Chat Header */}
-        <div className="p-4 border-b flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={selectedMember ? selectedMember.avatar_url || getPokeBallAvatar() : getPokeBallAvatar()}
-              alt={selectedMember ? selectedMember.display_name : 'PokéDexter'}
-              className="w-10 h-10 rounded-full object-cover"
-              onError={(e) => {
-                const img = e.target as HTMLImageElement
-                img.src = getPokeBallAvatar()
-              }}
-            />
-            <div>
-              <h3 className="font-medium">
-                {selectedMember ? `${selectedMember.display_name}'s AI Agent` : 'PokéDexter'}
-              </h3>
-              <p className="text-sm text-muted-foreground">Active now</p>
+    <div className="flex h-[600px] overflow-hidden rounded-xl">
+      {/* Sidebar */}
+      <div 
+        className={cn(
+          "bg-secondary text-secondary-foreground flex flex-col rounded-l-xl",
+          isSidebarOpen ? "w-[260px]" : "w-0",
+          "transition-all duration-300 ease-in-out overflow-hidden"
+        )}
+      >
+        {/* Family Members List */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-3 border-b border-border/10">
+            <h2 className="text-sm font-medium">Family Members</h2>
+          </div>
+          {/* Default PokéDexter Option */}
+          <div
+            className={cn(
+              "p-3 flex items-center gap-3 cursor-pointer transition-colors",
+              "hover:bg-accent/50",
+              !selectedMember ? "bg-accent/50" : ""
+            )}
+            onClick={() => setSelectedMember(null)}
+          >
+            <div className="relative">
+              <AvatarCircles
+                avatarUrls={[{
+                  imageUrl: getPokeBallImage(theme),
+                  profileUrl: '#'
+                }]}
+                className="scale-100"
+              />
+              <span 
+                className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary bg-green-500"
+              />
             </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium truncate">PokéDexter</h3>
+              <p className="text-xs text-secondary-foreground/60 truncate">
+                General Assistant
+              </p>
+            </div>
+          </div>
+          {familyMembers.length === 0 ? (
+            <div className="p-4 text-center text-secondary-foreground/60">
+              No family members found
+            </div>
+          ) : (
+            familyMembers.map(member => (
+              <div
+                key={member.id}
+                className={cn(
+                  "p-3 flex items-center gap-3 cursor-pointer transition-colors",
+                  "hover:bg-accent/50",
+                  selectedMember?.id === member.id ? "bg-accent/50" : ""
+                )}
+                onClick={() => setSelectedMember(member)}
+              >
+                <div className="relative">
+                  <AvatarCircles
+                    avatarUrls={[{
+                      imageUrl: member.avatar_url || getPokeBallImage(theme),
+                      profileUrl: '#'
+                    }]}
+                    className="scale-100"
+                  />
+                  <span 
+                    className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${getStatusColor(member.current_status)}`}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium truncate">{member.display_name}</h3>
+                  {member.starter_pokemon_nickname && (
+                    <p className="text-xs text-secondary-foreground/60 truncate">
+                      Partner: {member.starter_pokemon_nickname}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Control Panel */}
+        <div className="border-t border-border/10">
+          <div className="p-2 space-y-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-sm text-secondary-foreground/80 hover:bg-accent/50"
+              asChild
+            >
+              <Link href="/protected/admin">
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </Link>
+            </Button>
+          </div>
+          <div className="p-3 border-t border-border/10">
+            <div className="flex items-center gap-2">
+              <AvatarCircles
+                avatarUrls={[{
+                  imageUrl: selectedMember?.avatar_url || getPokeBallImage(theme),
+                  profileUrl: '#'
+                }]}
+                className="scale-100"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {selectedMember?.display_name || 'Guest User'}
+                </p>
+                <p className="text-xs text-secondary-foreground/60 truncate">
+                  Active User
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hover:bg-accent/50"
+                asChild
+              >
+                <Link href="/auth/signout">
+                  <LogOut className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-background rounded-r-xl">
+        {/* Chat Header */}
+        <div className="h-14 border-b flex items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="hover:bg-accent"
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
+            <h3 className="font-medium">
+              {selectedMember ? `${selectedMember.display_name}'s AI Agent` : 'PokéDexter'}
+            </h3>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -944,6 +1133,24 @@ export function PokeDexter() {
                 </option>
               ))}
             </select>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => {
+                setMessages([{
+                  id: '1',
+                  content: selectedMember 
+                    ? `Hi! I'm ${selectedMember.display_name}'s personal AI agent. How can I help you today?`
+                    : "Hi! I'm PokéDexter, your personal Pokémon assistant. Select a family member to chat with their personal AI agent, or chat with me for general assistance!",
+                  role: 'assistant',
+                  createdAt: new Date().toISOString()
+                }])
+              }}
+              className="hover:text-primary"
+              title="Refresh chat"
+            >
+              <RotateCw className="h-4 w-4" />
+            </Button>
             <Button 
               variant="ghost" 
               size="icon"
@@ -965,285 +1172,147 @@ export function PokeDexter() {
             <Button 
               variant="ghost" 
               size="icon"
-              asChild
+              onClick={() => setShowAdminPanel(!showAdminPanel)}
               title="PokéDexter Control Panel"
             >
+              <Info className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Admin Panel Dropdown */}
+        {showAdminPanel && (
+          <div className="absolute right-4 top-12 w-56 z-50 bg-background border rounded-xl shadow-lg p-2 space-y-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-sm"
+              asChild
+            >
               <Link href="/protected/admin">
-                <Info className="h-4 w-4" />
+                <Settings2 className="h-4 w-4 mr-2" />
+                Admin Panel
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-sm"
+              asChild
+            >
+              <Link href="/protected/admin">
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
               </Link>
             </Button>
           </div>
-        </div>
+        )}
 
-        <div className="flex flex-1 overflow-hidden relative">
-          {/* Family Members Sidebar */}
-          <div 
-            className={`${
-              isSidebarOpen ? 'w-80' : 'w-0'
-            } border-r flex flex-col transition-all duration-300 ease-in-out overflow-hidden`}
-          >
-            <div className="p-4 border-b flex items-center justify-between bg-accent/50">
-              <h2 className="text-lg font-semibold">Family Members</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSidebarOpen(false)}
-                className="hover:bg-accent"
-                title="Hide family members"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <ScrollArea className="flex-1">
-              {familyMembers.length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground">
-                  No family members found
+        {/* Messages Area */}
+        <ScrollArea ref={scrollAreaRef} className="flex-1">
+          <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+            {error && (
+              <Alert variant="destructive" className="mb-4 rounded-xl">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {messages.map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isUser={message.role === 'user'}
+                isSpeaking={isSpeaking}
+                audioRef={audioRef}
+                speakText={speakText}
+                setIsSpeaking={setIsSpeaking}
+                chatId={chatId}
+                setMessages={setMessages}
+                setError={setError}
+                theme={theme}
+                selectedMember={selectedMember}
+              />
+            ))}
+            {isLoading && (
+              <div className="flex items-start gap-3">
+                <img
+                  src={theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'}
+                  alt="PokéDexter"
+                  className="h-8 w-8 rounded-full"
+                />
+                <div className="bg-muted rounded-2xl px-4 py-2">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce" />
+                    <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-150" />
+                    <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-300" />
+                  </div>
                 </div>
-              ) : (
-                familyMembers.map(member => (
-                  <div
-                    key={member.id}
-                    className={`p-4 flex items-center gap-3 hover:bg-accent cursor-pointer ${
-                      selectedMember?.id === member.id ? 'bg-accent' : ''
-                    }`}
-                    onClick={() => setSelectedMember(member)}
-                  >
-                    <div className="relative">
-                      <img
-                        src={member.avatar_url || getPokeBallAvatar()}
-                        alt={member.display_name}
-                        className="w-10 h-10 rounded-full object-cover bg-muted"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement
-                          img.src = getPokeBallAvatar()
-                        }}
-                      />
-                      <span 
-                        className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(member.current_status)}`}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline">
-                        <h3 className="font-medium truncate">{member.display_name}</h3>
-                        {member.starter_pokemon_nickname && (
-                          <span className="text-xs text-muted-foreground">
-                            Partner: {member.starter_pokemon_nickname}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground truncate capitalize">
-                        {member.current_status || 'offline'}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </ScrollArea>
-          </div>
-
-          {/* Messages Area with Toggle Button */}
-          <div className="flex-1 flex flex-col relative">
-            {/* Toggle Button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(true)}
-              className={`absolute left-2 top-2 z-10 hover:bg-accent ${isSidebarOpen ? 'hidden' : ''}`}
-              title="Show family members"
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
-
-            <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-              {error && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}
-                  >
-                    {message.role === 'assistant' && (
-                      <img
-                        src={getPokeBallAvatar()}
-                        alt="PokéDexter"
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                    )}
-                    <div
-                      className={`max-w-[70%] rounded-2xl px-4 py-2 ${
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <p>{message.content}</p>
-                      {message.uploads && message.uploads.length > 0 && (
-                        <div className="mt-2 space-y-2">
-                          {message.uploads.map((upload, index) => (
-                            <div key={index}>
-                              {upload.mime.startsWith('image/') ? (
-                                <div className="relative group">
-                                  <div className="max-w-[200px] max-h-[200px] overflow-hidden rounded-lg">
-                                    <img
-                                      src={upload.data}
-                                      alt={upload.name}
-                                      className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                      onClick={() => window.open(upload.data, '_blank')}
-                                    />
-                                  </div>
-                                  <div className="mt-1 text-xs flex items-center gap-2 text-muted-foreground">
-                                    <ImagePlus className="h-3 w-3" />
-                                    <span>{upload.name}</span>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-sm flex items-center gap-2">
-                                  <Paperclip className="h-3 w-3" />
-                                  <span>{upload.name}</span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs opacity-70">
-                          {formatTime(message.timestamp)}
-                        </span>
-                        {message.role === 'assistant' && isTTSEnabled && (
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isSpeaking) {
-                                  if (audioRef.current) {
-                                    audioRef.current.pause();
-                                    setIsSpeaking(false);
-                                  }
-                                } else {
-                                  speakText(message.content);
-                                }
-                              }}
-                              title={isSpeaking ? "Stop reading" : "Read aloud"}
-                              className={`inline-flex items-center justify-center rounded-full w-5 h-5 ${
-                                isSpeaking 
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-muted-foreground/10 text-muted-foreground hover:bg-muted-foreground/20'
-                              } transition-colors`}
-                            >
-                              {isSpeaking ? (
-                                <VolumeX className="h-3 w-3" />
-                              ) : (
-                                <Volume2 className="h-3 w-3" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {message.role === 'user' && selectedMember && (
-                      <img
-                        src={selectedMember.avatar_url || getPokeBallAvatar()}
-                        alt={selectedMember.display_name}
-                        className="w-8 h-8 rounded-full object-cover bg-muted"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement
-                          img.src = getPokeBallAvatar()
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
-                {isLoading && (
-                  <div className="flex items-end gap-2">
-                    <img
-                      src={getPokeBallAvatar()}
-                      alt="PokéDexter"
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                    <div className="bg-muted rounded-2xl px-4 py-2">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce" />
-                        <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-150" />
-                        <span className="w-2 h-2 bg-foreground/30 rounded-full animate-bounce delay-300" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
               </div>
-            </ScrollArea>
+            )}
+            <div ref={messagesEndRef} />
           </div>
-        </div>
+        </ScrollArea>
 
         {/* Input Area */}
-        <form onSubmit={handleSendMessage} className="p-4 border-t">
-          <div className="flex items-center gap-2">
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon"
-              onClick={() => imageInputRef.current?.click()}
-              className={selectedFiles.length > 0 ? 'text-green-500' : ''}
-            >
-              <ImagePlus className="h-4 w-4" />
-            </Button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleImageSelect}
-              multiple
-              accept="image/*"
-            />
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              className={selectedFiles.length > 0 ? 'text-green-500' : ''}
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileSelect}
-              multiple
-              accept=".txt,.pdf,.doc,.docx,.csv,.json"
-            />
-            <Input
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1"
-            />
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon"
-              onClick={toggleRecording}
-              className={isRecording ? 'text-green-500' : ''}
-            >
-              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </Button>
-            <Button 
-              type="submit" 
-              variant="ghost" 
-              size="icon" 
-              disabled={!inputMessage.trim() || isLoading}
-              className={inputMessage.trim() ? 'text-green-500' : ''}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+        <div className="border-t p-4">
+          <div className="max-w-4xl mx-auto">
+            <form onSubmit={handleSendMessage} className="flex items-center gap-2 bg-muted/50 rounded-xl p-2">
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="icon"
+                onClick={() => imageInputRef.current?.click()}
+                className={cn(
+                  "transition-all duration-200 shrink-0",
+                  selectedFiles.length > 0 && "text-primary scale-110"
+                )}
+                title="Upload images"
+              >
+                <ImagePlus className="h-4 w-4" />
+              </Button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleImageSelect}
+                multiple
+                accept="image/*"
+              />
+              <Input
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder={selectedFiles.length > 0 ? "Add a message about your images..." : "Type a message..."}
+                className="flex-1 min-w-0"
+              />
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="icon"
+                onClick={toggleRecording}
+                className={cn(
+                  "transition-all duration-200 shrink-0",
+                  isRecording && "text-primary scale-110"
+                )}
+                title={isRecording ? "Stop recording" : "Start recording"}
+              >
+                {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </Button>
+              <Button 
+                type="submit" 
+                variant="ghost" 
+                size="icon" 
+                disabled={(!inputMessage.trim() && !selectedFiles.length) || isLoading}
+                className={cn(
+                  "transition-all duration-200 shrink-0",
+                  (inputMessage.trim() || selectedFiles.length > 0) && "text-primary scale-110"
+                )}
+                title="Send message"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   )
