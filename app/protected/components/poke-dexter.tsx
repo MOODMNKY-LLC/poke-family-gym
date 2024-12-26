@@ -406,30 +406,51 @@ export function PokeDexter() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/chat', {
+      if (!selectedMember?.chatflow_id) {
+        throw new Error('No chatflow selected. Please select a family member first.')
+      }
+
+      console.debug('Sending chat message:', {
+        content: userMessage.content,
+        chatId,
+        chatflowId: selectedMember.chatflow_id,
+        historyLength: messages.length
+      })
+
+      const response = await fetch('/api/flowise/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage.content,
           chatId,
-          chatflowId: selectedMember?.chatflow_id, // Use selected member's chatflow if available
+          chatflowId: selectedMember.chatflow_id,
           history: messages.map(msg => ({
             role: msg.role,
-            content: msg.content,
-            uploads: msg.uploads
-          }))
+            content: msg.content
+          })),
+          chatType: 'chat'
         })
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to get response')
+        console.error('Chat API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error
+        })
+        throw new Error(data.error || `Failed to get response (${response.status}): ${response.statusText}`)
+      }
+
+      if (!data || typeof data.text !== 'string') {
+        console.error('Invalid response format:', data)
+        throw new Error('Invalid response format from chat API')
       }
       
       const assistantMessage: Message = {
         id: uuidv4(),
-        content: data.message,
+        content: data.text,
         role: 'assistant',
         timestamp: new Date().toISOString()
       }
@@ -437,7 +458,7 @@ export function PokeDexter() {
       setMessages(prev => [...prev, assistantMessage])
       
       if (autoPlayTTS && isTTSEnabled) {
-        speakText(data.message)
+        speakText(data.text)
       }
     } catch (error) {
       console.error('Chat error:', error)
@@ -447,8 +468,8 @@ export function PokeDexter() {
       const errorAssistantMessage: Message = {
         id: uuidv4(),
         content: selectedMember 
-          ? `Sorry, I'm having trouble connecting to ${selectedMember.display_name}'s AI agent right now. Please try again later!`
-          : "Sorry, I'm having trouble connecting to my Pokédex right now. Please try again later!",
+          ? `Sorry, I'm having trouble connecting to ${selectedMember.display_name}'s AI agent right now. ${errorMessage}`
+          : `Sorry, I'm having trouble connecting to my Pokédex right now. ${errorMessage}`,
         role: 'assistant',
         timestamp: new Date().toISOString(),
         error: true
