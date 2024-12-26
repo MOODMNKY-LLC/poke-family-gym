@@ -215,6 +215,16 @@ interface ErrorDetails {
   context: ErrorContext
 }
 
+// Modify getDefaultChatflowId to use first chatflow from list
+function getDefaultChatflowId(chatflows: PokeChatFlow[]): string | null {
+  // First try env var
+  const envDefault = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID
+  if (envDefault) return envDefault
+  
+  // Otherwise use first chatflow from list
+  return chatflows.length > 0 ? chatflows[0].id || null : null
+}
+
 export function PokeDexterControl() {
   const { theme } = useTheme()
   const [chatflows, setChatflows] = useState<PokeChatFlow[]>([])
@@ -292,6 +302,21 @@ export function PokeDexterControl() {
       })
 
       setChatflows(convertedChatflows)
+
+      // Update default selections for family members if needed
+      if (familyMembers.length > 0) {
+        const defaultChatflowId = getDefaultChatflowId(convertedChatflows)
+        setSelectedChatflows(prev => {
+          const newSelections = { ...prev }
+          familyMembers.forEach(member => {
+            if (!newSelections[member.id]) {
+              newSelections[member.id] = member.chatflow_id || defaultChatflowId
+            }
+          })
+          return newSelections
+        })
+      }
+
     } catch (error) {
       console.error('Error in fetchChatflows:', error)
       if (error instanceof Error && error.message.includes('configuration')) {
@@ -485,13 +510,25 @@ export function PokeDexterControl() {
     }
   }
 
-  // Add new function to handle chatflow selection
+  // Modify handleChatflowSelection to use default when 'none' is selected
   const handleChatflowSelection = (memberId: string, chatflowId: string | 'none') => {
     setSelectedChatflows(prev => ({
       ...prev,
-      [memberId]: chatflowId === 'none' ? null : chatflowId
+      [memberId]: chatflowId === 'none' ? getDefaultChatflowId(chatflows) : chatflowId
     }))
   }
+
+  // Initialize selectedChatflows with default values
+  useEffect(() => {
+    if (familyMembers.length > 0) {
+      const defaultChatflowId = getDefaultChatflowId(chatflows)
+      const defaultSelections = familyMembers.reduce((acc, member) => ({
+        ...acc,
+        [member.id]: member.chatflow_id || defaultChatflowId
+      }), {})
+      setSelectedChatflows(defaultSelections)
+    }
+  }, [familyMembers, chatflows])
 
   // Modify handleChatflowAssignment to handle sync
   async function handleChatflowSync(member: FamilyMember) {
@@ -1113,11 +1150,11 @@ export function PokeDexterControl() {
                       const isSyncing = syncingMembers[member.id] || false
 
                       return (
-                        <TableRow key={member.id}>
+                      <TableRow key={member.id}>
                           <TableCell className="font-medium">{member.display_name}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Select
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Select
                                 value={selectedValue ?? 'none'}
                                 onValueChange={(value) => handleChatflowSelection(
                                   member.id,
@@ -1126,21 +1163,21 @@ export function PokeDexterControl() {
                                 disabled={isSyncing}
                               >
                                 <SelectTrigger className="w-[180px]">
-                                  <SelectValue placeholder="Select a chatflow" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {chatflows?.filter(cf => cf.id).map((chatflow) => (
+                                <SelectValue placeholder="Select a chatflow" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="none">Default ({chatflows.find(cf => cf.id === getDefaultChatflowId(chatflows))?.name || 'None'})</SelectItem>
+                                  {chatflows?.filter(cf => cf.id && cf.id !== getDefaultChatflowId(chatflows)).map((chatflow) => (
                                     <SelectItem key={chatflow.id!} value={chatflow.id!}>
-                                      {chatflow.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                    {chatflow.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
 
-                              <Button
-                                variant="ghost"
-                                size="icon"
+                            <Button
+                              variant="ghost"
+                              size="icon"
                                 onClick={() => handleChatflowSync(member)}
                                 disabled={!hasChanges || isSyncing}
                                 className={cn(
@@ -1153,12 +1190,12 @@ export function PokeDexterControl() {
                                 <span className="sr-only">
                                   {isSyncing ? 'Syncing...' : 'Sync chatflow'}
                                 </span>
-                              </Button>
-                            </div>
-                          </TableCell>
+                            </Button>
+                          </div>
+                        </TableCell>
                           <TableCell className="font-mono text-sm text-muted-foreground">
                             {selectedValue === 'none' ? '—' : selectedValue || '—'}
-                          </TableCell>
+                        </TableCell>
                           <TableCell>
                             {selectedValue && (
                               <Button

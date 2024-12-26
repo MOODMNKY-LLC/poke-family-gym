@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
+import { cn } from '@/lib/utils'
 import { 
   Bot, 
   User, 
@@ -19,9 +20,10 @@ import {
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { 
-  ChatBubble, 
+  ChatBubble,
   ChatBubbleAvatar, 
-  ChatBubbleMessage 
+  ChatBubbleMessage,
+  ChatBubbleTimestamp
 } from '@/components/ui/chat/chat-bubble'
 import { ChatMessageList } from '@/components/ui/chat/chat-message-list'
 import { ChatInput } from '@/components/ui/chat/chat-input'
@@ -33,6 +35,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { createClient, type FamilyMember } from '@/lib/supabase/client'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
+import { FlowiseAPI } from '@/lib/flowise/api'
+import socketIOClient from 'socket.io-client'
+import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 interface FileUpload {
   data: string
@@ -48,6 +59,247 @@ interface Message {
   timestamp: string
   error?: boolean
   uploads?: FileUpload[]
+  sourceDocuments?: any[]
+}
+
+interface PokeChatFlow {
+  id?: string
+  name: string
+  flowData?: string
+  chatbotConfig?: string
+}
+
+// Add new interface for analytics config
+interface AnalyticsConfig {
+  langFuse?: {
+    userId?: string;
+    sessionId?: string;
+    custom?: Record<string, any>;
+  };
+  langSmith?: {
+    userId?: string;
+    sessionId?: string;
+    custom?: Record<string, any>;
+  };
+  llmonitor?: {
+    userId?: string;
+    sessionId?: string;
+    custom?: Record<string, any>;
+  };
+}
+
+function getDefaultChatflowId(chatflows: PokeChatFlow[]): string | null {
+  // First try env var
+  const envDefault = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID
+  if (envDefault) return envDefault
+  
+  // Otherwise use first chatflow from list
+  return chatflows.length > 0 ? chatflows[0].id || null : null
+}
+
+async function validateChatflow(chatflowId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/chatflows/${chatflowId}`, {
+      headers: {
+        ...(process.env.NEXT_PUBLIC_FLOWISE_API_KEY && {
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
+        })
+      }
+    })
+    
+    if (!response.ok) {
+      console.warn(`Chatflow ${chatflowId} validation failed:`, response.statusText)
+      return false
+    }
+    
+    return true
+  } catch (error) {
+    console.error('Error validating chatflow:', error)
+    return false
+  }
+}
+
+function FormattedMessage({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      className="prose prose-sm dark:prose-invert max-w-none break-words"
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        code({ node, inline, className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || '')
+          const language = match ? match[1] : ''
+          
+          if (!inline && language) {
+            return (
+              <div className="rounded-md overflow-hidden my-2">
+                <SyntaxHighlighter
+                  language={language}
+                  style={oneDark}
+                  PreTag="div"
+                  customStyle={{
+                    margin: 0,
+                    padding: '1rem',
+                    fontSize: '0.875rem',
+                  }}
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              </div>
+            )
+          }
+          
+          return (
+            <code className={cn("bg-muted px-1.5 py-0.5 rounded-md text-sm", className)} {...props}>
+              {children}
+            </code>
+          )
+        },
+        // Style tables
+        table({ children }) {
+          return (
+            <div className="overflow-x-auto my-4">
+              <table className="min-w-full divide-y divide-border">
+                {children}
+              </table>
+            </div>
+          )
+        },
+        th({ children }) {
+          return (
+            <th className="px-4 py-2 bg-muted font-medium text-left">
+              {children}
+            </th>
+          )
+        },
+        td({ children }) {
+          return (
+            <td className="px-4 py-2 border-t">
+              {children}
+            </td>
+          )
+        },
+        blockquote({ children }) {
+          return (
+            <blockquote className="border-l-4 border-primary pl-4 italic my-4">
+              {children}
+            </blockquote>
+          )
+        },
+        a({ children, href }) {
+          return (
+            <a 
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              {children}
+            </a>
+          )
+        },
+        p({ children }) {
+          return (
+            <p className="mb-4 last:mb-0">
+              {children}
+            </p>
+          )
+        },
+        ul({ children }) {
+          return (
+            <ul className="list-disc pl-6 mb-4">
+              {children}
+            </ul>
+          )
+        },
+        ol({ children }) {
+          return (
+            <ol className="list-decimal pl-6 mb-4">
+              {children}
+            </ol>
+          )
+        }
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+
+function MessageBubble({ 
+  message, 
+  isUser,
+  isSpeaking,
+  audioRef,
+  speakText,
+  setIsSpeaking
+}: { 
+  message: Message; 
+  isUser: boolean;
+  isSpeaking: boolean;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  speakText: (text: string) => Promise<void>;
+  setIsSpeaking: (speaking: boolean) => void;
+}) {
+  const timestamp = new Date(message.timestamp).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  })
+
+  return (
+    <ChatBubble 
+      variant={isUser ? "sent" : "received"}
+      className={cn(message.error && "bg-destructive/10")}
+    >
+      {!isUser && (
+        <ChatBubbleAvatar 
+          fallback="PD"
+          className="h-8 w-8 flex items-center justify-center"
+        />
+      )}
+      
+      <div className="flex flex-col gap-1">
+        <ChatBubbleMessage>
+          <FormattedMessage content={message.content} />
+          {!isUser && (
+            <div className="flex items-center gap-2 mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => speakText(message.content)}
+                disabled={isSpeaking}
+              >
+                {isSpeaking ? <Volume2 className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.pause();
+                    setIsSpeaking(false);
+                  }
+                }}
+                disabled={!isSpeaking}
+              >
+                <VolumeX className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </ChatBubbleMessage>
+        <ChatBubbleTimestamp timestamp={timestamp} />
+      </div>
+
+      {isUser && (
+        <ChatBubbleAvatar 
+          fallback="U"
+          className="h-8 w-8 flex items-center justify-center"
+        />
+      )}
+    </ChatBubble>
+  )
 }
 
 export function PokeDexter() {
@@ -70,11 +322,15 @@ export function PokeDexter() {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isTTSEnabled, setIsTTSEnabled] = useState(true)
   const [autoPlayTTS, setAutoPlayTTS] = useState(false)
-  const [selectedVoice, setSelectedVoice] = useState<string>('nova')
+  const [selectedVoice, setSelectedVoice] = useState<string>('alloy')
   const openAIVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [chatflows, setChatflows] = useState<PokeChatFlow[]>([])
+  const [currentChatflowId, setCurrentChatflowId] = useState<string | null>(null)
+  const [socketId, setSocketId] = useState<string | null>(null)
+  const socketRef = useRef<any>(null)
 
   // Add initial welcome message when no member is selected
   useEffect(() => {
@@ -86,15 +342,18 @@ export function PokeDexter() {
         timestamp: new Date().toISOString()
       }])
     } else {
-      // Clear messages when switching members
+      // Use member's chatflow_id if available, otherwise use default
+      const chatflowId = selectedMember.chatflow_id || currentChatflowId
+      const chatflow = chatflows.find(cf => cf.id === chatflowId)
+      
       setMessages([{
         id: '1',
-        content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent. How can I help you today?`,
+        content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent${chatflow ? ` (${chatflow.name})` : ''}. How can I help you today?`,
         role: 'assistant',
         timestamp: new Date().toISOString()
       }])
     }
-  }, [selectedMember])
+  }, [selectedMember, currentChatflowId, chatflows])
 
   function getAvatarUrl(member: FamilyMember): string {
     if (!member.avatar_url) return '/images/pokeball-light.svg'
@@ -336,7 +595,7 @@ export function PokeDexter() {
 
   // Function to speak text using OpenAI TTS
   const speakText = async (text: string) => {
-    if (!isTTSEnabled) return
+    if (!isTTSEnabled || !text?.trim()) return
     
     try {
       // Cancel any ongoing speech
@@ -346,18 +605,20 @@ export function PokeDexter() {
       }
       
       setIsSpeaking(true)
+      console.debug('TTS Request:', { text, voice: selectedVoice })
       
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          text,
+          text: text.trim(),
           voice: selectedVoice
         })
       })
 
       if (!response.ok) {
-        throw new Error('TTS request failed')
+        const errorText = await response.text()
+        throw new Error(`TTS request failed: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
       const audioBlob = await response.blob()
@@ -371,7 +632,8 @@ export function PokeDexter() {
         URL.revokeObjectURL(audioUrl)
       }
       
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e)
         setIsSpeaking(false)
         URL.revokeObjectURL(audioUrl)
       }
@@ -381,10 +643,54 @@ export function PokeDexter() {
     } catch (error) {
       console.error('TTS error:', error)
       setIsSpeaking(false)
+      setError(error instanceof Error ? error.message : 'Failed to play audio')
     }
   }
 
-  // Update handleSendMessage to use the selected member's chatflow
+  // Update the socket connection setup
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_FLOWISE_API_URL) {
+      console.error('NEXT_PUBLIC_FLOWISE_API_URL is not configured')
+      return
+    }
+
+    try {
+      // Initialize socket connection
+      const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL, {
+        transports: ['websocket', 'polling'],
+        path: '/api/v1/socket.io'
+      })
+      socketRef.current = socket
+
+      socket.on('connect', () => {
+        console.debug('Socket connected:', socket.id)
+        setSocketId(socket.id)
+      })
+
+      socket.on('error', (error: any) => {
+        console.error('Socket error:', error)
+        setError(`Socket error: ${error?.message || 'Unknown error'}`)
+      })
+
+      socket.on('disconnect', () => {
+        console.debug('Socket disconnected')
+        setSocketId(null)
+      })
+
+      // Cleanup on unmount
+      return () => {
+        if (socket) {
+          socket.removeAllListeners()
+          socket.disconnect()
+        }
+      }
+    } catch (error) {
+      console.error('Socket initialization error:', error)
+      setError('Failed to initialize chat connection')
+    }
+  }, [])
+
+  // Update handleSendMessage function
   async function handleSendMessage(e?: React.FormEvent, voiceMessage?: Message) {
     e?.preventDefault()
     const content = inputMessage.trim()
@@ -392,6 +698,8 @@ export function PokeDexter() {
 
     setError(null)
     setInputMessage('')
+    let streamedMessage = ''
+    let sourceDocuments: any[] = []
 
     const userMessage = voiceMessage || {
       id: uuidv4(),
@@ -406,75 +714,138 @@ export function PokeDexter() {
     setIsLoading(true)
 
     try {
-      if (!selectedMember?.chatflow_id) {
-        throw new Error('No chatflow selected. Please select a family member first.')
+      const chatflowId = selectedMember?.chatflow_id || currentChatflowId
+      if (!chatflowId) {
+        throw new Error('No chatflow available')
       }
 
-      console.debug('Sending chat message:', {
-        content: userMessage.content,
-        chatId,
-        chatflowId: selectedMember.chatflow_id,
-        historyLength: messages.length
-      })
+      // Enhanced request body with analytics and memory config
+      const requestBody = {
+        question: userMessage.content,
+        history: messages.map(msg => ({
+          role: msg.role === 'user' ? 'userMessage' : 'apiMessage',
+          content: msg.content
+        })),
+        overrideConfig: {
+          sessionId: chatId,
+          returnSourceDocuments: true,
+          socketIOClientId: socketId,
+          memoryType: 'zep', // or other memory types
+          memoryWindow: 5,
+          analytics: {
+            langFuse: {
+              userId: selectedMember?.id,
+              sessionId: chatId,
+              custom: {
+                memberName: selectedMember?.display_name,
+                memberRole: selectedMember?.role_id
+              }
+            }
+          }
+        },
+        uploads: userMessage.uploads
+      }
 
-      const response = await fetch('/api/flowise/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMessage.content,
-          chatId,
-          chatflowId: selectedMember.chatflow_id,
-          history: messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          })),
-          chatType: 'chat'
+      // Set up enhanced socket listeners
+      if (socketRef.current && socketId) {
+        const messageId = uuidv4()
+
+        socketRef.current.removeAllListeners()
+
+        socketRef.current.on('start', () => {
+          console.debug('Stream started')
+          streamedMessage = ''
+          setMessages(prev => [...prev, {
+            id: messageId,
+            content: '',
+            role: 'assistant',
+            timestamp: new Date().toISOString()
+          }])
         })
-      })
 
-      const data = await response.json()
+        socketRef.current.on('token', (token: string) => {
+          streamedMessage += token
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, content: streamedMessage }
+              : msg
+          ))
+        })
+
+        socketRef.current.on('sourceDocuments', (docs: any) => {
+          console.debug('Source documents:', docs)
+          sourceDocuments = docs
+          // Update message with source documents
+          setMessages(prev => prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, sourceDocuments: docs }
+              : msg
+          ))
+        })
+
+        socketRef.current.on('error', (error: any) => {
+          console.error('Stream error:', error)
+          setError(`Stream error: ${error?.message || 'Unknown error'}`)
+        })
+
+        socketRef.current.on('end', async () => {
+          console.debug('Stream ended')
+          if (streamedMessage && autoPlayTTS && isTTSEnabled) {
+            try {
+              await speakText(streamedMessage)
+            } catch (error) {
+              console.error('Auto-playback error:', error)
+            }
+          }
+          setIsLoading(false)
+        })
+      }
+
+      // Make API request with enhanced error handling
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/prediction/${chatflowId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.NEXT_PUBLIC_FLOWISE_API_KEY && {
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
+          })
+        },
+        body: JSON.stringify(requestBody)
+      })
 
       if (!response.ok) {
-        console.error('Chat API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: data.error
-        })
-        throw new Error(data.error || `Failed to get response (${response.status}): ${response.statusText}`)
+        const errorText = await response.text()
+        throw new Error(`Chat request failed: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
-      if (!data || typeof data.text !== 'string') {
-        console.error('Invalid response format:', data)
-        throw new Error('Invalid response format from chat API')
+      // Handle non-streaming response
+      if (!socketRef.current || !socketId) {
+        const data = await response.json()
+        const assistantMessage: Message = {
+          id: uuidv4(),
+          content: data.text || data.answer || 'No response received',
+          role: 'assistant',
+          timestamp: new Date().toISOString(),
+          sourceDocuments: data.sourceDocuments
+        }
+        setMessages(prev => [...prev, assistantMessage])
+        
+        if (autoPlayTTS && isTTSEnabled) {
+          await speakText(assistantMessage.content)
+        }
       }
-      
-      const assistantMessage: Message = {
-        id: uuidv4(),
-        content: data.text,
-        role: 'assistant',
-        timestamp: new Date().toISOString()
-      }
-      
-      setMessages(prev => [...prev, assistantMessage])
-      
-      if (autoPlayTTS && isTTSEnabled) {
-        speakText(data.text)
-      }
+
     } catch (error) {
       console.error('Chat error:', error)
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
       setError(errorMessage)
-      
-      const errorAssistantMessage: Message = {
+      setMessages(prev => [...prev, {
         id: uuidv4(),
-        content: selectedMember 
-          ? `Sorry, I'm having trouble connecting to ${selectedMember.display_name}'s AI agent right now. ${errorMessage}`
-          : `Sorry, I'm having trouble connecting to my Pokédex right now. ${errorMessage}`,
+        content: `Error: ${errorMessage}`,
         role: 'assistant',
         timestamp: new Date().toISOString(),
         error: true
-      }
-      setMessages(prev => [...prev, errorAssistantMessage])
+      }])
     } finally {
       setIsLoading(false)
     }
@@ -514,6 +885,29 @@ export function PokeDexter() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  useEffect(() => {
+    async function fetchChatflows() {
+      try {
+        const data = await FlowiseAPI.getChatflows()
+        const convertedChatflows = data.filter(cf => cf.id).map(cf => ({
+          id: cf.id,
+          name: cf.name,
+          flowData: cf.flowData,
+          chatbotConfig: cf.chatbotConfig
+        }))
+        setChatflows(convertedChatflows)
+        
+        // Set default chatflow
+        const defaultId = getDefaultChatflowId(convertedChatflows)
+        setCurrentChatflowId(defaultId)
+      } catch (error) {
+        console.error('Error fetching chatflows:', error)
+      }
+    }
+
+    fetchChatflows()
+  }, [])
 
   return (
     <div className="flex h-[600px] bg-background border rounded-lg overflow-hidden">
@@ -722,29 +1116,33 @@ export function PokeDexter() {
                           {formatTime(message.timestamp)}
                         </span>
                         {message.role === 'assistant' && isTTSEnabled && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isSpeaking) {
-                                window.speechSynthesis.cancel()
-                                setIsSpeaking(false)
-                              } else {
-                                speakText(message.content)
-                              }
-                            }}
-                            title="Read aloud"
-                            className={`inline-flex items-center justify-center rounded-full w-5 h-5 ${
-                              isSpeaking 
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-muted-foreground/10 text-muted-foreground hover:bg-muted-foreground/20'
-                            } transition-colors`}
-                          >
-                            {isSpeaking ? (
-                              <VolumeX className="h-3 w-3" />
-                            ) : (
-                              <Volume2 className="h-3 w-3" />
-                            )}
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isSpeaking) {
+                                  if (audioRef.current) {
+                                    audioRef.current.pause();
+                                    setIsSpeaking(false);
+                                  }
+                                } else {
+                                  speakText(message.content);
+                                }
+                              }}
+                              title={isSpeaking ? "Stop reading" : "Read aloud"}
+                              className={`inline-flex items-center justify-center rounded-full w-5 h-5 ${
+                                isSpeaking 
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                  : 'bg-muted-foreground/10 text-muted-foreground hover:bg-muted-foreground/20'
+                              } transition-colors`}
+                            >
+                              {isSpeaking ? (
+                                <VolumeX className="h-3 w-3" />
+                              ) : (
+                                <Volume2 className="h-3 w-3" />
+                              )}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

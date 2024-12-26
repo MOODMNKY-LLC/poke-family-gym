@@ -44,40 +44,96 @@ export async function flowiseRequest(endpoint: string, options: RequestInit = {}
   }
 
   const url = `${FLOWISE_API_URL}/api/v1/${endpoint}`
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${FLOWISE_API_KEY}`,
-      ...options.headers,
-    },
+  
+  console.debug('Making Flowise request:', {
+    url,
+    method: options.method,
+    bodyLength: options.body ? JSON.stringify(options.body).length : 0
   })
 
-  if (!response.ok) {
-    const contentType = response.headers.get('content-type')
-    let errorMessage: string
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${FLOWISE_API_KEY}`,
+        ...options.headers,
+      },
+    })
 
-    try {
-      if (contentType?.includes('application/json')) {
-        const errorData = await response.json()
-        errorMessage = errorData.error || JSON.stringify(errorData)
-      } else {
-        errorMessage = await response.text()
+    const contentType = response.headers.get('content-type')
+    const responseText = await response.text()
+
+    console.debug('Flowise response:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType,
+      responseLength: responseText.length,
+      isHtml: responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')
+    })
+
+    if (!response.ok) {
+      let errorMessage: string
+
+      try {
+        if (contentType?.includes('application/json')) {
+          const errorData = JSON.parse(responseText)
+          errorMessage = errorData.error || JSON.stringify(errorData)
+        } else if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
+          errorMessage = 'Flowise server returned HTML instead of JSON. Please check server configuration.'
+        } else {
+          errorMessage = responseText || response.statusText || 'Unknown error occurred'
+        }
+      } catch (e) {
+        errorMessage = `Failed to parse error response: ${responseText}`
       }
-    } catch (e) {
-      errorMessage = response.statusText || 'Unknown error occurred'
+
+      throw new FlowiseError(errorMessage, response.status, {
+        contentType,
+        responseText: responseText.substring(0, 1000) // First 1000 chars for debugging
+      })
     }
 
-    throw new FlowiseError(errorMessage, response.status)
-  }
+    if (!contentType?.includes('application/json')) {
+      throw new FlowiseError(
+        'Flowise server returned non-JSON response. Please check server configuration.',
+        500,
+        {
+          contentType,
+          responsePreview: responseText.substring(0, 1000)
+        }
+      )
+    }
 
-  const contentType = response.headers.get('content-type')
-  if (!contentType?.includes('application/json')) {
-    throw new FlowiseError(`Expected JSON response but got ${contentType}`, 500)
+    try {
+      return JSON.parse(responseText)
+    } catch (e) {
+      throw new FlowiseError(
+        'Failed to parse JSON response from Flowise server',
+        500,
+        {
+          error: e,
+          responsePreview: responseText.substring(0, 1000)
+        }
+      )
+    }
+  } catch (error) {
+    if (error instanceof FlowiseError) {
+      throw error
+    }
+    
+    console.error('Flowise request failed:', {
+      url,
+      error
+    })
+    
+    throw new FlowiseError(
+      error instanceof Error ? error.message : 'Failed to communicate with Flowise server',
+      500,
+      { originalError: error }
+    )
   }
-
-  return response.json()
 }
 
 // Helper function to handle file uploads
