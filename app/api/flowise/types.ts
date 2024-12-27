@@ -3,26 +3,18 @@ export interface ChatFlow {
   id: string
   name: string
   flowData: string
-  deployed: boolean | null
-  isPublic: boolean | null
-  apikeyid: string | null
-  chatbotConfig: string | null
-  apiConfig: string | null
-  analytic: string | null
-  speechToText: string | null
-  category: string | null
-  type: string
-  followUpPrompts: string | null
+  deployed: boolean
+  isPublic: boolean
+  apikeyid?: string
+  chatbotConfig?: string
   createdDate: string
   updatedDate: string
-  systemMessage: string | null
-  temperature: number | null
-  maxTokens: number | null
-  topP: number | null
-  frequencyPenalty: number | null
-  presencePenalty: number | null
-  memoryType: string | null
-  memoryWindow: number | null
+  apiConfig?: string
+  analytic?: string
+  category?: string
+  speechToText?: string
+  type?: string
+  followUpPrompts?: string
 }
 
 // Chat message interfaces

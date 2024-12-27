@@ -1,127 +1,68 @@
-import { NextRequest, NextResponse } from 'next/server'
-import axios, { AxiosError, isAxiosError } from 'axios'
+import { NextResponse } from 'next/server'
+import { validateFlowiseConfig } from '@/app/lib/flowise/config'
 
-const FLOWISE_API_URL = process.env.NEXT_PUBLIC_FLOWISE_API_URL
-const FLOWISE_API_KEY = process.env.NEXT_PUBLIC_FLOWISE_API_KEY
+export async function POST(request: Request) {
+  try {
+    const config = validateFlowiseConfig()
+    const { endpoint, method = 'GET', body } = await request.json()
 
-// Create axios instance for server-side requests
-const flowiseServer = axios.create({
-  baseURL: `${FLOWISE_API_URL}/api/v1`,
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${FLOWISE_API_KEY}`
-  }
-})
+    // Ensure endpoint starts with /api/v1
+    const apiPath = endpoint.startsWith('/api/v1') ? endpoint : `/api/v1${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+    const url = `${config.apiUrl}${apiPath}`
 
-// Add response interceptor for debugging
-flowiseServer.interceptors.response.use(
-  (response) => {
-    console.debug('Flowise server response:', {
-      url: response.config.url,
-      method: response.config.method,
-      status: response.status,
-      dataPreview: typeof response.data === 'object' ? Object.keys(response.data) : typeof response.data
+    console.debug('Proxy request to Flowise:', {
+      url,
+      method,
+      hasBody: !!body
     })
-    return response
-  },
-  (error) => {
-    if (isAxiosError(error)) {
-      console.error('Server response error:', {
-        url: error.config?.url,
-        method: error.config?.method,
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+
+    // Check for HTML response
+    const contentType = response.headers.get('content-type')
+    if (contentType?.includes('text/html')) {
+      const text = await response.text()
+      console.error('Received HTML response from Flowise:', {
+        status: response.status,
+        url,
+        preview: text.substring(0, 200)
       })
-    }
-    return Promise.reject(error)
-  }
-)
-
-export async function GET(request: NextRequest) {
-  try {
-    const url = new URL(request.url)
-    const path = url.pathname.replace('/api/flowise/proxy', '')
-    
-    console.debug('Proxying GET request:', { path })
-    
-    const response = await flowiseServer.get(path)
-    return NextResponse.json(response.data)
-  } catch (error) {
-    if (isAxiosError(error)) {
-      console.error('Proxy GET error:', error)
-      return new NextResponse(
-        JSON.stringify({ 
-          error: 'Failed to proxy request',
-          details: error.response?.data
-        }), 
-        { status: error.response?.status || 500 }
+      return NextResponse.json(
+        { error: 'Received HTML instead of JSON. Please check if Flowise server is running and accessible.' },
+        { status: 502 }
       )
     }
-    return new NextResponse(
-      JSON.stringify({ error: 'An unknown error occurred' }), 
-      { status: 500 }
-    )
-  }
-}
 
-export async function POST(request: NextRequest) {
-  try {
-    const url = new URL(request.url)
-    const path = url.pathname.replace('/api/flowise/proxy', '')
-    const body = await request.json()
-    
-    // Handle method override for DELETE requests
-    if (body._method === 'DELETE') {
-      console.debug('Proxying DELETE request via POST:', { path })
-      const response = await flowiseServer.delete(path)
-      return NextResponse.json(response.data)
-    }
-    
-    console.debug('Proxying POST request:', { path, body })
-    const response = await flowiseServer.post(path, body)
-    return NextResponse.json(response.data)
-  } catch (error) {
-    if (isAxiosError(error)) {
-      console.error('Proxy POST error:', error)
-      return new NextResponse(
-        JSON.stringify({ 
-          error: 'Failed to proxy request',
-          details: error.response?.data
-        }), 
-        { status: error.response?.status || 500 }
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Flowise API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText.substring(0, 200)
+      })
+      return NextResponse.json(
+        { error: `Flowise API error: ${response.status} ${response.statusText}` },
+        { status: response.status }
       )
     }
-    return new NextResponse(
-      JSON.stringify({ error: 'An unknown error occurred' }), 
-      { status: 500 }
-    )
-  }
-}
 
-export async function PUT(request: NextRequest) {
-  try {
-    const url = new URL(request.url)
-    const path = url.pathname.replace('/api/flowise/proxy', '')
-    const body = await request.json()
-    
-    console.debug('Proxying PUT request:', { path, body })
-    
-    const response = await flowiseServer.put(path, body)
-    return NextResponse.json(response.data)
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
-    if (isAxiosError(error)) {
-      console.error('Proxy PUT error:', error)
-      return new NextResponse(
-        JSON.stringify({ 
-          error: 'Failed to proxy request',
-          details: error.response?.data
-        }), 
-        { status: error.response?.status || 500 }
-      )
-    }
-    return new NextResponse(
-      JSON.stringify({ error: 'An unknown error occurred' }), 
+    console.error('Proxy error:', error)
+    return NextResponse.json(
+      { 
+        error: error instanceof Error ? error.message : 'Internal server error',
+        details: error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     )
   }

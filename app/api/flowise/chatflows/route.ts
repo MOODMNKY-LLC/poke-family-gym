@@ -139,8 +139,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT /api/flowise/chatflows/[id] - Update a chatflow
-export async function PUT(req: NextRequest) {
+// PATCH /api/flowise/chatflows/[id] - Update a chatflow
+export async function PATCH(req: NextRequest) {
   try {
     const id = req.url.split('/').pop()
     if (!id) {
@@ -152,7 +152,7 @@ export async function PUT(req: NextRequest) {
 
     // Update in Flowise
     const flowiseData = await flowiseRequest(`chatflows/${id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify(body)
     })
 
@@ -171,7 +171,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json(flowiseData)
   } catch (error) {
-    console.error('Error in PUT /api/flowise/chatflows:', error)
+    console.error('Error in PATCH /api/flowise/chatflows:', error)
     return NextResponse.json(
       handleFlowiseError(error),
       { status: 500 }
