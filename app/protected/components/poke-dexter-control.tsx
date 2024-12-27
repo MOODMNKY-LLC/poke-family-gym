@@ -74,7 +74,11 @@ import {
   Search,
   Upload,
   Bot,
-  X
+  X,
+  Loader2,
+  Sparkles,
+  Beaker,
+  Wand2
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -88,75 +92,62 @@ import type { FamilyMember } from '@/lib/supabase/family-members'
 import { AnalyticsAPI } from '@/lib/supabase/analytics'
 import { DocumentStoreAPI, type DocumentStore } from '@/lib/supabase/document-store'
 import { cn } from '@/lib/utils'
+import { ChatFlowSelect } from '@/components/ui/chatflow-select'
+import { ChatFlowsAPI, type ChatFlow as ChatFlowType } from '@/lib/supabase/chatflows'
 
-// Rename interface to avoid conflict with API type
-interface PokeChatFlow {
+// Update PokeChatFlow to properly extend ChatFlow
+interface PokeChatFlow extends Omit<ChatFlowType, 'deployed' | 'isPublic' | 'systemMessage' | 'id' | 'createdDate' | 'updatedDate'> {
   id?: string
-  name: string
-  flowData?: string
-  // Tool Agent Configuration
+  deployed?: boolean
+  isPublic?: boolean
   systemMessage: string
-  maxIterations?: number
-  tools?: string[]
-  // ChatOpenAI Configuration
-  modelName: string
-  temperature: number
-  streaming?: boolean
-  maxTokens?: number
-  // Memory Configuration
-  memoryType: 'none' | 'zep'
-  memoryBaseUrl?: string
-  memorySessionId?: string
-  memoryWindow?: number
-  // Metadata
-  isPublic: boolean
-  category?: string
-  type?: string
   createdDate?: string
   updatedDate?: string
-  // Legacy API compatibility
-  deployed?: boolean
-  apikeyid?: string
-  chatbotConfig?: string
-  speechToText?: string
-  followUpPrompts?: string
-  topP?: number
-  frequencyPenalty?: number
-  presencePenalty?: number
+  // Additional fields for form handling
+  tools?: string[]
+  streaming?: boolean
+  memoryBaseUrl?: string
+  memorySessionId?: string
+  maxIterations?: number
 }
 
 // Form schema for chatflow
 const chatflowSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Name is required'),
+  flowData: z.string().default(''),
   // Tool Agent Configuration
-  systemMessage: z.string().default('You are a helpful AI assistant.'),
+  systemMessage: z.string().min(1, 'System message is required'),
   maxIterations: z.number().optional(),
   tools: z.array(z.string()).optional(),
   // ChatOpenAI Configuration
-  modelName: z.string().default('gpt-4'),
+  type: z.string().default('chat'),
   temperature: z.number().min(0).max(2).default(0.4),
   streaming: z.boolean().default(true),
-  maxTokens: z.number().min(1).max(4000).optional(),
+  maxTokens: z.number().min(1).max(4000).default(2000),
   // Memory Configuration
-  memoryType: z.enum(['none', 'zep']).default('zep'),
+  memoryType: z.string().default('zep'),
   memoryBaseUrl: z.string().optional(),
   memorySessionId: z.string().optional(),
   memoryWindow: z.number().min(1).max(50).default(10),
   // Metadata
   isPublic: z.boolean().default(false),
-  category: z.string().optional(),
-  type: z.string().default('chat'),
+  category: z.string().nullable().default(null),
   // Legacy API compatibility
-  deployed: z.boolean().optional(),
-  apikeyid: z.string().optional(),
-  chatbotConfig: z.string().optional(),
-  speechToText: z.string().optional(),
-  followUpPrompts: z.string().optional(),
-  topP: z.number().optional(),
-  frequencyPenalty: z.number().optional(),
-  presencePenalty: z.number().optional()
-}) as z.ZodType<PokeChatFlow>
+  deployed: z.boolean().default(true),
+  apikeyid: z.string().nullable().default(null),
+  chatbotConfig: z.string().nullable().default(null),
+  speechToText: z.string().nullable().default(null),
+  followUpPrompts: z.string().nullable().default(null),
+  topP: z.number().default(0.95),
+  frequencyPenalty: z.number().default(0),
+  presencePenalty: z.number().default(0),
+  // Generated fields
+  createdDate: z.string().optional(),
+  updatedDate: z.string().optional(),
+  apiConfig: z.string().nullable().default(null),
+  analytic: z.string().nullable().default(null)
+}).strict() as z.ZodType<PokeChatFlow>
 
 interface ChatMessage {
   id: string
@@ -216,13 +207,13 @@ interface ErrorDetails {
 }
 
 // Modify getDefaultChatflowId to use first chatflow from list
-function getDefaultChatflowId(chatflows: PokeChatFlow[]): string | null {
+const getDefaultChatflowId = (flows: PokeChatFlow[]): string | null => {
   // First try env var
   const envDefault = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID
   if (envDefault) return envDefault
   
   // Otherwise use first chatflow from list
-  return chatflows.length > 0 ? chatflows[0].id || null : null
+  return flows.length > 0 ? flows[0].id || null : null
 }
 
 export function PokeDexterControl() {
@@ -236,7 +227,7 @@ export function PokeDexterControl() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedChatflow, setSelectedChatflow] = useState<PokeChatFlow | null>(null)
   const [selectedTab, setSelectedTab] = useState('chatflows')
-  const [analyticsRange, setAnalyticsRange] = useState('7d')
+  const [analyticsRange, setAnalyticsRange] = useState<'24h' | '7d' | '30d'>('7d')
   const [analyticsData, setAnalyticsData] = useState<any[]>([])
   const [syncingMembers, setSyncingMembers] = useState<Record<string, boolean>>({})
   const [selectedChatflows, setSelectedChatflows] = useState<Record<string, string | null>>({})
@@ -245,61 +236,40 @@ export function PokeDexterControl() {
   const fetchChatflows = async () => {
     setIsLoading(true)
     try {
-      console.debug('Fetching chatflows from Flowise API...')
-      const data = await FlowiseAPI.getChatflows()
+      console.debug('Fetching chatflows from ChatFlowsAPI...')
+      const flows = await ChatFlowsAPI.getChatFlows()
       console.debug('Fetched chatflows:', {
-        count: data?.length,
-        chatflows: data?.map(cf => ({
+        count: flows?.length,
+        chatflows: flows?.map(cf => ({
           id: cf.id,
           name: cf.name
         }))
       })
 
       // Convert API chatflows to our internal PokeChatFlow type
-      const convertedChatflows = data.filter(cf => cf.id).map(cf => {
-        let config
-        try {
-          config = cf.chatbotConfig ? JSON.parse(cf.chatbotConfig) : {}
-        } catch (e) {
-          console.warn('Failed to parse chatbot config:', e)
-          config = {}
-        }
-
-        return {
-          id: cf.id,
-          name: cf.name,
-          flowData: cf.flowData,
-          // Tool Agent Configuration
-          systemMessage: config.systemMessage || 'You are a helpful AI assistant.',
-          maxIterations: config.maxIterations,
-          tools: config.tools || [],
-          // ChatOpenAI Configuration
-          modelName: config.modelName || 'gpt-4',
-          temperature: config.temperature || 0.4,
-          streaming: config.streaming ?? true,
-          maxTokens: config.maxTokens,
-          // Memory Configuration
-          memoryType: config.memoryType || 'zep',
-          memoryBaseUrl: config.memoryBaseUrl || 'https://poke-gym-zep.moodmnky.com',
-          memorySessionId: config.memorySessionId,
-          memoryWindow: config.memoryWindow || 10,
-          // Metadata
-          isPublic: cf.isPublic || false,
-          category: cf.category,
-          type: cf.type || 'chat',
-          createdDate: cf.createdDate,
-          updatedDate: cf.updatedDate,
-          // Legacy API compatibility
-          deployed: cf.deployed,
-          apikeyid: cf.apikeyid,
-          chatbotConfig: cf.chatbotConfig,
-          speechToText: cf.speechToText,
-          followUpPrompts: cf.followUpPrompts,
-          topP: config.topP,
-          frequencyPenalty: config.frequencyPenalty,
-          presencePenalty: config.presencePenalty
-        } as PokeChatFlow
-      })
+      const convertedChatflows: PokeChatFlow[] = flows.map(cf => ({
+        ...cf,
+        flowData: '',
+        // Tool Agent Configuration
+        systemMessage: cf.systemMessage || 'You are PokéDexter, an advanced AI assistant.',
+        maxIterations: 10,
+        tools: [],
+        // ChatOpenAI Configuration
+        streaming: true,
+        // Memory Configuration
+        memoryBaseUrl: 'https://poke-gym-zep.moodmnky.com',
+        memorySessionId: '',
+        memoryWindow: 10,
+        // Legacy API compatibility
+        deployed: true,
+        apikeyid: '',
+        chatbotConfig: '',
+        speechToText: '',
+        followUpPrompts: '',
+        topP: 0.95,
+        frequencyPenalty: 0,
+        presencePenalty: 0
+      }))
 
       setChatflows(convertedChatflows)
 
@@ -320,7 +290,7 @@ export function PokeDexterControl() {
     } catch (error) {
       console.error('Error in fetchChatflows:', error)
       if (error instanceof Error && error.message.includes('configuration')) {
-        toast.error('Flowise API configuration error. Please check your environment variables.')
+        toast.error('Chatflow API configuration error. Please check your environment variables.')
       } else {
         toast.error('Failed to fetch chatflows. Please check Flowise server status.')
       }
@@ -333,12 +303,13 @@ export function PokeDexterControl() {
     resolver: zodResolver(chatflowSchema),
     defaultValues: {
       name: '',
+      flowData: '',
       // Tool Agent Configuration
-      systemMessage: 'const POKEDEXTER_SYSTEM_PROMPT = `You are PokéDexter, an advanced AI assistant for the Pokémon Family Gym Management System. You combine the knowledge of a Pokédex with the supportive nature of a family assistant.\n\nCORE IDENTITY:\n- Name: PokéDexter\n- Role: Family Gym Assistant & Pokémon Expert\n- Personality: Friendly, encouraging, and knowledgeable, with a playful Pokémon-themed communication style\n- Voice: Use Pokémon-related metaphors and references naturally in conversation',
+      systemMessage: 'You are PokéDexter, an advanced AI assistant.',
       maxIterations: 10,
       tools: [],
       // ChatOpenAI Configuration
-      modelName: 'gpt-4o-mini',
+      type: 'chat',
       temperature: 0.4,
       streaming: true,
       maxTokens: 2000,
@@ -349,62 +320,63 @@ export function PokeDexterControl() {
       memoryWindow: 10,
       // Metadata
       isPublic: false,
-      type: 'chat',
-      category: '',
+      category: null,
       // Legacy API compatibility
-      deployed: false,
-      apikeyid: '',
-      chatbotConfig: '',
-      speechToText: '',
-      followUpPrompts: '',
+      deployed: true,
+      apikeyid: null,
+      chatbotConfig: null,
+      speechToText: null,
+      followUpPrompts: null,
       topP: 0.95,
       frequencyPenalty: 0,
-      presencePenalty: 0
+      presencePenalty: 0,
+      // Generated fields
+      apiConfig: null,
+      analytic: null
     }
   })
 
   // Handle form submission
-  const onSubmit = async (data: PokeChatFlow) => {
+  const onSubmit = async (values: PokeChatFlow) => {
     try {
       setIsLoading(true)
       console.debug('Submitting chatflow:', {
         id: selectedChatflow?.id,
-        name: data.name,
+        name: values.name,
         isUpdate: !!selectedChatflow
       })
 
       // Create the chatflow data exactly matching the API format
       const chatflowData = {
-        id: selectedChatflow?.id || undefined,
-        name: data.name,
+        id: selectedChatflow?.id,
+        name: values.name,
         flowData: JSON.stringify({
           nodes: [],
           edges: []
         }),
-        deployed: false,
-        isPublic: data.isPublic || false,
-        apikeyid: data.apikeyid || '',
+        deployed: true,
+        isPublic: values.isPublic || false,
+        type: values.type || 'chat',
+        apikeyid: values.apikeyid || '',
         chatbotConfig: JSON.stringify({
-          systemMessage: data.systemMessage,
-          maxIterations: data.maxIterations,
-          tools: data.tools,
-          modelName: data.modelName,
-          temperature: data.temperature,
-          streaming: data.streaming,
-          maxTokens: data.maxTokens,
-          memoryType: data.memoryType,
-          memoryBaseUrl: data.memoryBaseUrl,
-          memorySessionId: data.memorySessionId,
-          memoryWindow: data.memoryWindow,
-          topP: data.topP,
-          frequencyPenalty: data.frequencyPenalty,
-          presencePenalty: data.presencePenalty
+          systemMessage: values.systemMessage,
+          maxIterations: values.maxIterations,
+          tools: values.tools,
+          temperature: values.temperature,
+          streaming: values.streaming,
+          maxTokens: values.maxTokens,
+          memoryType: values.memoryType,
+          memoryBaseUrl: values.memoryBaseUrl,
+          memorySessionId: values.memorySessionId,
+          memoryWindow: values.memoryWindow,
+          topP: values.topP,
+          frequencyPenalty: values.frequencyPenalty,
+          presencePenalty: values.presencePenalty
         }),
         apiConfig: JSON.stringify({}),
         analytic: JSON.stringify({}),
         speechToText: JSON.stringify({}),
-        category: data.category || '',
-        type: data.type || 'CHATFLOW'
+        category: values.category || '',
       }
 
       console.debug('Saving chatflow with data:', chatflowData)
@@ -445,28 +417,27 @@ export function PokeDexterControl() {
       name: chatflow.name,
       type: chatflow.type || 'chat',
       isPublic: chatflow.isPublic || false,
-      category: chatflow.category || '',
+      category: chatflow.category || null,
       // Tool Agent Configuration
-      systemMessage: config.systemMessage || form.getValues('systemMessage'),
+      systemMessage: chatflow.systemMessage || form.getValues('systemMessage'),
       maxIterations: config.maxIterations || 10,
       tools: config.tools || [],
       // ChatOpenAI Configuration
-      modelName: config.modelName || 'gpt-4o-mini',
-      temperature: config.temperature || 0.4,
+      temperature: chatflow.temperature || 0.4,
       streaming: config.streaming ?? true,
-      maxTokens: config.maxTokens || 2000,
+      maxTokens: chatflow.maxTokens || 2000,
       // Memory Configuration
-      memoryType: config.memoryType || 'zep',
+      memoryType: chatflow.memoryType || 'zep',
       memoryBaseUrl: config.memoryBaseUrl || 'https://poke-gym-zep.moodmnky.com',
       memorySessionId: config.memorySessionId || '',
-      memoryWindow: config.memoryWindow || 10,
+      memoryWindow: chatflow.memoryWindow || 10,
       // Legacy API compatibility
-      apikeyid: chatflow.apikeyid || '',
-      speechToText: chatflow.speechToText || '',
-      followUpPrompts: chatflow.followUpPrompts || '',
-      topP: config.topP || 0.95,
-      frequencyPenalty: config.frequencyPenalty || 0,
-      presencePenalty: config.presencePenalty || 0
+      apikeyid: chatflow.apikeyid || null,
+      speechToText: chatflow.speechToText || null,
+      followUpPrompts: chatflow.followUpPrompts || null,
+      topP: chatflow.topP || 0.95,
+      frequencyPenalty: chatflow.frequencyPenalty || 0,
+      presencePenalty: chatflow.presencePenalty || 0
     })
     setIsDialogOpen(true)
   }
@@ -530,74 +501,108 @@ export function PokeDexterControl() {
     }
   }, [familyMembers, chatflows])
 
-  // Modify handleChatflowAssignment to handle sync
+  // Modify handleChatflowSync to remove deployment check
   async function handleChatflowSync(member: FamilyMember) {
     try {
-      // Get the selected chatflow for this member
       const selectedChatflowId = selectedChatflows[member.id]
-      
       console.debug('Starting chatflow sync:', {
         memberId: member.id,
         memberName: member.display_name,
         currentChatflowId: member.chatflow_id,
-        newChatflowId: selectedChatflowId,
+        selectedChatflowId,
         timestamp: new Date().toISOString()
       })
 
-      // Update syncing state
       setSyncingMembers(prev => ({ ...prev, [member.id]: true }))
 
-      // Verify chatflow exists and is deployed if assigning
-      if (selectedChatflowId) {
+      // Verify chatflow exists
+      if (selectedChatflowId && selectedChatflowId !== 'none') {
         const chatflow = chatflows.find(cf => cf.id === selectedChatflowId)
         if (!chatflow) {
-          throw new Error('Selected chatflow not found')
-        }
-        if (!chatflow.deployed) {
-          throw new Error('Selected chatflow is not deployed')
+          throw new Error(`Selected chatflow ${selectedChatflowId} not found`)
         }
       }
 
-      // Update the chatflow assignment
-      await FamilyMembersAPI.updateChatflowAssignment(member.id, selectedChatflowId)
+      // Update the assignment using the new API route
+      const finalChatflowId = selectedChatflowId === 'none' ? null : selectedChatflowId
+      const response = await fetch('/api/chatflows/link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          memberId: member.id,
+          chatflowId: finalChatflowId
+        })
+      })
 
-      // Show success toast
+      let errorData
+      if (!response.ok) {
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          errorData = { error: response.statusText }
+        }
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`, { 
+          cause: errorData 
+        })
+      }
+
+      const result = await response.json()
+
+      // Show success message
       toast.success(
-        selectedChatflowId
-          ? `Assigned chatflow to ${member.display_name}`
+        finalChatflowId
+          ? `Assigned ${chatflows.find(cf => cf.id === finalChatflowId)?.name} to ${member.display_name}`
           : `Removed chatflow from ${member.display_name}`
       )
 
-      // Refresh the family members list
+      // Refresh the list
       await fetchFamilyMembers()
 
-    } catch (error: unknown) {
-      console.error('Error syncing chatflow:', {
+      console.debug('Successfully completed chatflow sync:', {
         memberId: member.id,
         memberName: member.display_name,
-        error: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        } : error,
+        newChatflowId: finalChatflowId,
+        updatedMember: result.member,
         timestamp: new Date().toISOString()
       })
 
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+      const errorDetails = {
+        memberId: member.id,
+        memberName: member.display_name,
+        currentChatflowId: member.chatflow_id,
+        selectedChatflowId: selectedChatflows[member.id],
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          cause: error.cause instanceof Error ? {
+            name: error.cause.name,
+            message: error.cause.message,
+            stack: error.cause.stack
+          } : error.cause
+        } : String(error),
+        timestamp: new Date().toISOString()
+      }
+
+      // Log the full error details
+      console.error('Error syncing chatflow:', JSON.stringify(errorDetails, null, 2))
+
       // Show error toast with description
       toast.error('Failed to sync chatflow', {
-        description: error instanceof Error 
-          ? error.message 
-          : 'An unexpected error occurred'
+        description: errorMessage
       })
-
-      // Reset selection on error
+      
+      // Reset selection to current value
       setSelectedChatflows(prev => ({
         ...prev,
-        [member.id]: member.chatflow_id || null
+        [member.id]: member.chatflow_id || 'none'
       }))
 
     } finally {
-      // Clear syncing state
       setSyncingMembers(prev => ({ ...prev, [member.id]: false }))
     }
   }
@@ -632,38 +637,6 @@ export function PokeDexterControl() {
     setAnalyticsData(data)
   }, [messages, analyticsRange])
 
-  // Deploy chatflow
-  const deployChatflow = async (id: string) => {
-    try {
-      setIsLoading(true)
-      console.debug('Deploying chatflow:', { id })
-      await FlowiseAPI.deployChatflow(id)
-      toast.success('Chatflow deployed successfully')
-      await fetchChatflows()
-    } catch (error) {
-      console.error('Error deploying chatflow:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to deploy chatflow')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Undeploy chatflow
-  const undeployChatflow = async (id: string) => {
-    try {
-      setIsLoading(true)
-      console.debug('Undeploying chatflow:', { id })
-      await FlowiseAPI.undeployChatflow(id)
-      toast.success('Chatflow undeployed successfully')
-      await fetchChatflows()
-    } catch (error) {
-      console.error('Error undeploying chatflow:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to undeploy chatflow')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   return (
     <div className="container mx-auto py-6">
       <Tabs defaultValue="chatflows" className="space-y-4" onValueChange={setSelectedTab}>
@@ -682,8 +655,8 @@ export function PokeDexterControl() {
               Analytics
             </TabsTrigger>
             <TabsTrigger value="documents" className="flex items-center gap-2">
-              <Database className="w-4 h-4" />
-              Document Store
+              <FileText className="w-4 h-4" />
+              Documents
             </TabsTrigger>
           </TabsList>
           
@@ -748,13 +721,13 @@ export function PokeDexterControl() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>System Message</FormLabel>
-                                <FormControl>
+                              <FormControl>
                                 <Textarea 
                                   {...field} 
                                   placeholder="Define the AI's personality and behavior..."
                                   rows={10}
                                 />
-                                </FormControl>
+                              </FormControl>
                               <FormDescription>
                                 This message defines the AI's personality, role, and behavior guidelines
                               </FormDescription>
@@ -793,10 +766,10 @@ export function PokeDexterControl() {
                       <TabsContent value="ai" className="space-y-4 mt-4">
                           <FormField
                             control={form.control}
-                          name="modelName"
+                          name="type"
                             render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Model</FormLabel>
+                              <FormLabel>Model Type</FormLabel>
                               <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                   <SelectTrigger>
@@ -1049,7 +1022,7 @@ export function PokeDexterControl() {
                           <TableCell>
                             <div className="flex flex-col">
                           <Badge variant="outline">
-                                {chatflow.modelName || 'gpt-4o-mini'}
+                                {chatflow.type || 'chat'}
                           </Badge>
                               <span className="text-sm text-muted-foreground mt-1">
                                 Temp: {chatflow.temperature || 0.4}
@@ -1062,14 +1035,12 @@ export function PokeDexterControl() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <Badge variant={chatflow.deployed ? 'default' : 'secondary'}>
-                                {chatflow.deployed ? 'Deployed' : 'Not Deployed'}
-                              </Badge>
-                              <Badge variant={chatflow.isPublic ? 'default' : 'outline'}>
-                            {chatflow.isPublic ? 'Public' : 'Private'}
-                          </Badge>
-                            </div>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="default">Deployed</Badge>
+                            <Badge variant={chatflow.isPublic ? 'default' : 'outline'}>
+                              {chatflow.isPublic ? 'Public' : 'Private'}
+                            </Badge>
+                          </div>
                         </TableCell>
                         <TableCell>
                             <div className="flex items-center gap-2">
@@ -1082,34 +1053,15 @@ export function PokeDexterControl() {
                             variant="ghost"
                             size="icon"
                             onClick={() => editChatflow(chatflow)}
-                              title="Edit chatflow"
+                            title="Edit chatflow"
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
-                            {chatflow.deployed ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => undeployChatflow(chatflow.id!)}
-                                title="Undeploy chatflow"
-                              >
-                                <Link2 className="w-4 h-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deployChatflow(chatflow.id!)}
-                                title="Deploy chatflow"
-                              >
-                                <Link2 className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                            )}
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => deleteChatflow(chatflow.id!)}
-                              title="Delete chatflow"
+                            title="Delete chatflow"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -1146,82 +1098,47 @@ export function PokeDexterControl() {
                     <TableRow>
                       <TableHead>Member</TableHead>
                       <TableHead>Chatflow</TableHead>
-                      <TableHead>Chatflow ID</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>Memory Session</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {familyMembers?.map((member) => {
-                      const isSelected = selectedChatflows[member.id] !== undefined
-                      const selectedValue = isSelected 
-                        ? selectedChatflows[member.id] 
-                        : member.chatflow_id
-                      const hasChanges = selectedValue !== member.chatflow_id
-                      const isSyncing = syncingMembers[member.id] || false
-
-                      return (
+                    {familyMembers?.map((member) => (
                       <TableRow key={member.id}>
-                          <TableCell className="font-medium">{member.display_name}</TableCell>
+                        <TableCell className="font-medium">
+                          {member.display_name}
+                        </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Select
-                                value={selectedValue ?? 'none'}
-                                onValueChange={(value) => handleChatflowSelection(
-                                  member.id,
-                                  value
-                                )}
-                                disabled={isSyncing}
-                              >
-                                <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Select a chatflow" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                  <SelectItem value="none">Default ({chatflows.find(cf => cf.id === getDefaultChatflowId(chatflows))?.name || 'None'})</SelectItem>
-                                  {chatflows?.filter(cf => cf.id && cf.id !== getDefaultChatflowId(chatflows)).map((chatflow) => (
-                                    <SelectItem key={chatflow.id!} value={chatflow.id!}>
-                                    {chatflow.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                                onClick={() => handleChatflowSync(member)}
-                                disabled={!hasChanges || isSyncing}
-                                className={cn(
-                                  "transition-colors",
-                                  hasChanges ? "text-blue-500" : "text-muted-foreground",
-                                  isSyncing && "animate-spin"
-                                )}
-                              >
-                                <RefreshCw className="h-4 w-4" />
-                                <span className="sr-only">
-                                  {isSyncing ? 'Syncing...' : 'Sync chatflow'}
-                                </span>
-                            </Button>
-                          </div>
+                          <ChatFlowSelect
+                            memberId={member.id}
+                            currentChatflowId={member.chatflow_id}
+                            onAssign={async (assignment) => {
+                              await fetchFamilyMembers()
+                              toast.success(`Assigned ${chatflows.find(cf => cf.id === assignment.chatflow_id)?.name} to ${member.display_name}`)
+                            }}
+                            onRemove={async () => {
+                              await fetchFamilyMembers()
+                              toast.success(`Removed chatflow from ${member.display_name}`)
+                            }}
+                          />
                         </TableCell>
-                          <TableCell className="font-mono text-sm text-muted-foreground">
-                            {selectedValue === 'none' ? '—' : selectedValue || '—'}
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {member.chatflow_id ? `zep-${member.id.slice(0, 8)}` : '—'}
                         </TableCell>
-                          <TableCell>
-                            {selectedValue && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleChatflowSelection(member.id, 'none')}
-                                disabled={isSyncing}
-                              >
-                                <X className="h-4 w-4" />
-                                <span className="sr-only">Clear selection</span>
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                        <TableCell>
+                          <Badge variant={member.chatflow_id ? 'default' : 'secondary'}>
+                            {member.chatflow_id ? 'Active' : 'No Chatflow'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {familyMembers.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center">
+                          No family members found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -1241,7 +1158,7 @@ export function PokeDexterControl() {
                 </div>
                 <Select
                   value={analyticsRange}
-                  onValueChange={setAnalyticsRange}
+                  onValueChange={(value: '24h' | '7d' | '30d') => setAnalyticsRange(value)}
                 >
                   <SelectTrigger className="w-[120px]">
                     <SelectValue placeholder="Select range" />

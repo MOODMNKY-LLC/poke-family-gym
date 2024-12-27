@@ -255,33 +255,47 @@ export type Database = {
       }
       chat_message_feedback: {
         Row: {
-          chatflowid: string
-          chatId: string
+          chat_id: string
           content: string | null
-          createdDate: string
+          created_at: string
+          family_id: string
           id: string
-          messageId: string
+          message_id: string
           rating: string
+          updated_at: string
+          user_id: string
         }
         Insert: {
-          chatflowid: string
-          chatId: string
+          chat_id: string
           content?: string | null
-          createdDate?: string
+          created_at?: string
+          family_id: string
           id?: string
-          messageId: string
+          message_id: string
           rating: string
+          updated_at?: string
+          user_id?: string
         }
         Update: {
-          chatflowid?: string
-          chatId?: string
+          chat_id?: string
           content?: string | null
-          createdDate?: string
+          created_at?: string
+          family_id?: string
           id?: string
-          messageId?: string
+          message_id?: string
           rating?: string
+          updated_at?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_feedback_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "family_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       credential: {
         Row: {
@@ -439,71 +453,47 @@ export type Database = {
         }
         Relationships: []
       }
-      family_admins: {
-        Row: {
-          created_at: string
-          id: number
-          is_active: boolean
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: never
-          is_active?: boolean
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: never
-          is_active?: boolean
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       family_member_chatflows: {
         Row: {
-          assigned_at: string
-          assigned_by: string | null
           chatflow_id: string
           created_at: string
-          deactivated_at: string | null
-          deactivated_by: string | null
-          id: number
-          is_active: boolean
+          id: string
           member_id: string
           role: string
           updated_at: string
         }
         Insert: {
-          assigned_at?: string
-          assigned_by?: string | null
           chatflow_id: string
           created_at?: string
-          deactivated_at?: string | null
-          deactivated_by?: string | null
-          id?: never
-          is_active?: boolean
+          id?: string
           member_id: string
           role?: string
           updated_at?: string
         }
         Update: {
-          assigned_at?: string
-          assigned_by?: string | null
           chatflow_id?: string
           created_at?: string
-          deactivated_at?: string | null
-          deactivated_by?: string | null
-          id?: never
-          is_active?: boolean
+          id?: string
           member_id?: string
           role?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "family_member_chatflows_chatflow_id_fkey"
+            columns: ["chatflow_id"]
+            isOneToOne: false
+            referencedRelation: "chat_flow"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "family_member_chatflows_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       family_members: {
         Row: {
@@ -806,6 +796,41 @@ export type Database = {
           phone?: string | null
         }
         Relationships: []
+      }
+      member_chatflow_assignments: {
+        Row: {
+          chatflow_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          member_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          chatflow_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          member_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          chatflow_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          member_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_chatflow_assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       migrations: {
         Row: {
@@ -1287,19 +1312,7 @@ export type Database = {
           p_chatflow_id: string
           p_role?: string
         }
-        Returns: {
-          assigned_at: string
-          assigned_by: string | null
-          chatflow_id: string
-          created_at: string
-          deactivated_at: string | null
-          deactivated_by: string | null
-          id: number
-          is_active: boolean
-          member_id: string
-          role: string
-          updated_at: string
-        }
+        Returns: string
       }
       avals: {
         Args: {

@@ -48,7 +48,7 @@ import { FlowiseAPI } from '@/lib/flowise/api'
 import socketIOClient from 'socket.io-client'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -268,6 +268,148 @@ const MessageBubble = ({
   const [isHelpful, setIsHelpful] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  const MarkdownComponents = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || '')
+      const language = match ? match[1] : ''
+      
+      if (!inline && language) {
+        return (
+          <SyntaxHighlighter
+            style={theme === 'dark' ? oneDark : oneLight}
+            language={language}
+            PreTag="div"
+            {...props}
+          >
+            {String(children).replace(/\n$/, '')}
+          </SyntaxHighlighter>
+        )
+      }
+
+      return inline ? (
+        <code className={cn(
+          "rounded-sm bg-muted px-1 py-0.5 font-mono text-sm",
+          className
+        )} {...props}>
+          {children}
+        </code>
+      ) : (
+        <SyntaxHighlighter
+          style={theme === 'dark' ? oneDark : oneLight}
+          language="text"
+          PreTag="div"
+          {...props}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      )
+    },
+    a({ node, className, children, ...props }: any) {
+      return (
+        <a 
+          className={cn(
+            "text-primary underline underline-offset-4 hover:text-primary/80",
+            className
+          )} 
+          {...props}
+        >
+          {children}
+        </a>
+      )
+    },
+    p({ node, className, children, ...props }: any) {
+      return (
+        <p 
+          className={cn("mb-2 last:mb-0", className)} 
+          {...props}
+        >
+          {children}
+        </p>
+      )
+    },
+    ul({ node, className, children, ...props }: any) {
+      return (
+        <ul 
+          className={cn("list-disc pl-6 mb-2", className)} 
+          {...props}
+        >
+          {children}
+        </ul>
+      )
+    },
+    ol({ node, className, children, ...props }: any) {
+      return (
+        <ol 
+          className={cn("list-decimal pl-6 mb-2", className)} 
+          {...props}
+        >
+          {children}
+        </ol>
+      )
+    },
+    h1: ({ node, className, children, ...props }: any) => (
+      <h1 className={cn("text-2xl font-bold mb-2", className)} {...props}>
+        {children}
+      </h1>
+    ),
+    h2: ({ node, className, children, ...props }: any) => (
+      <h2 className={cn("text-xl font-bold mb-2", className)} {...props}>
+        {children}
+      </h2>
+    ),
+    h3: ({ node, className, children, ...props }: any) => (
+      <h3 className={cn("text-lg font-bold mb-2", className)} {...props}>
+        {children}
+      </h3>
+    ),
+    blockquote: ({ node, className, children, ...props }: any) => (
+      <blockquote 
+        className={cn(
+          "border-l-2 border-primary pl-4 italic mb-2",
+          className
+        )} 
+        {...props}
+      >
+        {children}
+      </blockquote>
+    ),
+    table: ({ node, className, children, ...props }: any) => (
+      <div className="overflow-x-auto mb-2">
+        <table 
+          className={cn(
+            "min-w-full divide-y divide-border",
+            className
+          )} 
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ node, className, children, ...props }: any) => (
+      <th 
+        className={cn(
+          "px-3 py-2 text-left text-sm font-semibold bg-muted",
+          className
+        )} 
+        {...props}
+      >
+        {children}
+      </th>
+    ),
+    td: ({ node, className, children, ...props }: any) => (
+      <td 
+        className={cn(
+          "px-3 py-2 text-sm",
+          className
+        )} 
+        {...props}
+      >
+        {children}
+      </td>
+    ),
+  }
+
   const handleFeedback = async (helpful: boolean) => {
     setIsLoading(true)
     setIsHelpful(helpful)
@@ -306,7 +448,23 @@ const MessageBubble = ({
               isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
             )}
           >
-            {message.content}
+            {message.error ? (
+              message.content
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={MarkdownComponents}
+                className={cn(
+                  "prose prose-sm max-w-none",
+                  isUser 
+                    ? "prose-invert" 
+                    : "prose-neutral dark:prose-invert"
+                )}
+              >
+                {message.content}
+              </ReactMarkdown>
+            )}
             {message.image && (
               <img
                 src={message.image}
