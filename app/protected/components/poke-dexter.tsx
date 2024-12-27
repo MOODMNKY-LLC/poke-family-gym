@@ -91,7 +91,7 @@ interface PokeChatFlow {
   id?: string
   name: string
   flowData?: string
-  chatbotConfig?: string
+  chatbotConfig?: string | null
 }
 
 // Add new interface for analytics config
