@@ -861,7 +861,7 @@ export function PokeDexter() {
       // Initialize socket connection
       const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL, {
         transports: ['websocket', 'polling'],
-        path: '/api/v1/socket.io'
+        path: '/socket.io'
       })
       socketRef.current = socket
 
@@ -1022,7 +1022,7 @@ export function PokeDexter() {
       }
 
       // Make API request
-      const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/prediction/${chatflowId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/prediction/${chatflowId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
