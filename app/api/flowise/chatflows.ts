@@ -10,7 +10,7 @@ async function flowiseRequest(endpoint: string, options: RequestInit = {}) {
     throw new Error('Flowise API configuration missing')
   }
 
-  const url = `${FLOWISE_API_URL}/api/v1/${endpoint}`
+  const url = `${FLOWISE_API_URL}/${endpoint}`
   const headers = new Headers(options.headers)
   headers.set('Authorization', `Bearer ${FLOWISE_API_KEY}`)
   headers.set('Content-Type', 'application/json')

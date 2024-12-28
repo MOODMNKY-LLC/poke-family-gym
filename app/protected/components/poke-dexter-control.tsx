@@ -1,38 +1,41 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { useTheme } from 'next-themes'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { ChatFlowSelect } from '@/components/ui/chatflow-select'
+import { ChatFlowsAPI } from '@/lib/supabase/chatflows'
+import { ChatflowsList } from './chatflows-list'
+import { FlowiseAPI } from '@/lib/flowise/api'
+import { toast } from 'sonner'
+import type { ChatFlow } from '@/lib/flowise/types'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+  Bot,
+  Settings,
+  MessageSquare,
+  BarChart2,
+  Users,
+  Database,
+  Loader2,
+  Copy,
+  Wand2,
+  Sparkles,
+  Braces,
+  Network,
+  HardDrive,
+  Cpu,
+  Upload,
+  UserPlus,
+  Filter,
+  Download,
+  Calendar
+} from 'lucide-react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 import {
   Form,
   FormControl,
@@ -43,661 +46,359 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { useForm } from 'react-hook-form'
+import { Slider } from '@/components/ui/slider'
+import { Textarea } from '@/components/ui/textarea'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
+} from "@/components/ui/select"
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { createClient } from '@/lib/supabase/client'
-import { 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  RefreshCw, 
-  Link2, 
-  Settings2,
-  FileText,
-  BarChart2,
-  Users,
-  MessageSquare,
-  ThumbsUp,
-  ThumbsDown,
-  Clock,
-  Database,
-  Search,
-  Upload,
-  Bot,
-  X,
-  Loader2,
-  Sparkles,
-  Beaker,
-  Wand2
-} from 'lucide-react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
-import { toast } from 'sonner'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
-import { getAvatarUrl } from '@/lib/utils'
-import { FlowiseAPI } from '@/lib/flowise/api'
-import { FamilyMembersAPI } from '@/lib/supabase/family-members'
-import type { FamilyMember } from '@/lib/supabase/family-members'
-import { AnalyticsAPI } from '@/lib/supabase/analytics'
-import { DocumentStoreAPI, type DocumentStore } from '@/lib/supabase/document-store'
-import { cn } from '@/lib/utils'
-import { ChatFlowSelect } from '@/components/ui/chatflow-select'
-import { ChatFlowsAPI, type ChatFlow as ChatFlowType } from '@/lib/supabase/chatflows'
+import { DocumentList } from './document-list'
+import { DocumentStoreAPI } from '@/lib/flowise/api'
+import type { Document, ProcessingConfig } from '@/lib/flowise/types'
+import { DocumentUploadForm } from './document-upload-form'
 
-// Update PokeChatFlow to properly extend ChatFlow
-interface PokeChatFlow extends Omit<ChatFlowType, 'deployed' | 'isPublic' | 'systemMessage' | 'id' | 'createdDate' | 'updatedDate'> {
-  id?: string
-  deployed?: boolean
-  isPublic?: boolean
-  systemMessage: string
-  createdDate?: string
-  updatedDate?: string
-  // Additional fields for form handling
-  tools?: string[]
-  streaming?: boolean
-  memoryBaseUrl?: string
-  memorySessionId?: string
-  maxIterations?: number
+// Config types
+interface ChatbotConfig {
+  systemMessage?: string
+  temperature?: number
+  maxTokens?: number
+  memoryType?: string
+  memoryWindow?: number
+  [key: string]: any // Allow other properties
 }
+
+interface ApiConfig {
+  [key: string]: any
+}
+
+// Add type options constant
+const CHATFLOW_TYPES = [
+  { value: 'chat', label: 'Chat' },
+  { value: 'assistant', label: 'Assistant' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'custom', label: 'Custom' }
+] as const
 
 // Form schema for chatflow
 const chatflowSchema = z.object({
-  id: z.string().optional(),
   name: z.string().min(1, 'Name is required'),
-  flowData: z.string().default(''),
-  // Tool Agent Configuration
   systemMessage: z.string().min(1, 'System message is required'),
-  maxIterations: z.number().optional(),
-  tools: z.array(z.string()).optional(),
-  // ChatOpenAI Configuration
-  type: z.string().default('chat'),
   temperature: z.number().min(0).max(2).default(0.4),
-  streaming: z.boolean().default(true),
   maxTokens: z.number().min(1).max(4000).default(2000),
-  // Memory Configuration
   memoryType: z.string().default('zep'),
-  memoryBaseUrl: z.string().optional(),
-  memorySessionId: z.string().optional(),
   memoryWindow: z.number().min(1).max(50).default(10),
-  // Metadata
+  memoryBaseUrl: z.string().optional(),
+  aiPrefix: z.string().default('ai'),
+  humanPrefix: z.string().default('human'),
   isPublic: z.boolean().default(false),
-  category: z.string().nullable().default(null),
-  // Legacy API compatibility
   deployed: z.boolean().default(true),
-  apikeyid: z.string().nullable().default(null),
-  chatbotConfig: z.string().nullable().default(null),
-  speechToText: z.string().nullable().default(null),
-  followUpPrompts: z.string().nullable().default(null),
-  topP: z.number().default(0.95),
-  frequencyPenalty: z.number().default(0),
-  presencePenalty: z.number().default(0),
-  // Generated fields
-  createdDate: z.string().optional(),
-  updatedDate: z.string().optional(),
-  apiConfig: z.string().nullable().default(null),
-  analytic: z.string().nullable().default(null)
-}).strict() as z.ZodType<PokeChatFlow>
+  type: z.string().default('chat'),
+  speechToText: z.boolean().default(false)
+})
 
-interface ChatMessage {
-  id: string
-  role: string
-  chatflowid: string
-  content: string
-  sourceDocuments?: string
-  createdDate: string
-  chatType: string
-  chatId: string
-  memoryType?: string
-  sessionId?: string
-  usedTools?: string
-  fileAnnotations?: string
-  fileUploads?: string
-  leadEmail?: string
-  agentReasoning?: string
-  action?: string
-  artifacts?: string
-  followUpPrompts?: string
-  rating?: string // Added for analytics
-}
+type ChatflowFormValues = z.infer<typeof chatflowSchema>
 
-interface ChatMessageFeedback {
-  id: string
-  chatflowid: string
-  content?: string
-  chatId: string
-  messageId: string
-  rating: string
-  createdDate: string
-}
+// Memory type options
+const MEMORY_TYPES = [
+  { 
+    value: 'none', 
+    label: 'No Memory',
+    description: 'Chatflow will not retain conversation history'
+  },
+  { 
+    value: 'zep', 
+    label: 'Zep Memory',
+    description: 'Long-term memory using Zep server for conversation history'
+  },
+  {
+    value: 'redis',
+    label: 'Redis Memory',
+    description: 'In-memory storage using Redis for fast access'
+  },
+  {
+    value: 'mongo',
+    label: 'MongoDB Memory',
+    description: 'Persistent storage using MongoDB for conversation history'
+  }
+] as const
 
-// Error types
-interface BaseErrorContext {
-  memberId: string | undefined
-  timestamp: string
-}
+// Node type options
+const NODE_TYPES = [
+  {
+    value: 'chatOpenAI',
+    label: 'ChatOpenAI',
+    description: 'OpenAI chat completion model',
+    category: 'Models'
+  },
+  {
+    value: 'zepMemory',
+    label: 'Zep Memory',
+    description: 'Long-term memory storage',
+    category: 'Memory'
+  },
+  {
+    value: 'toolAgent',
+    label: 'Tool Agent',
+    description: 'Agent for managing tools and responses',
+    category: 'Agents'
+  }
+] as const
 
-interface VerifyFlowContext extends BaseErrorContext {
-  operation: 'verifyFlow'
-  chatflowId: string | undefined
-}
+// Add processing config schema
+const processingConfigSchema = z.object({
+  chunkSize: z.number().min(100).max(4000).default(1000),
+  chunkOverlap: z.number().min(0).max(1000).default(200),
+  splitStrategy: z.enum(['token', 'sentence', 'paragraph']).default('sentence'),
+  embedModel: z.string().default('text-embedding-ada-002')
+})
 
-interface AssignChatflowContext extends BaseErrorContext {
-  operation: 'assignChatflow'
-  chatflowId: string | null | undefined
-}
-
-type ErrorContext = VerifyFlowContext | AssignChatflowContext
-
-interface ErrorDetails {
-  name: string
-  message: string
-  details?: Record<string, unknown>
-  context: ErrorContext
-}
-
-// Modify getDefaultChatflowId to use first chatflow from list
-const getDefaultChatflowId = (flows: PokeChatFlow[]): string | null => {
-  // First try env var
-  const envDefault = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID
-  if (envDefault) return envDefault
-  
-  // Otherwise use first chatflow from list
-  return flows.length > 0 ? flows[0].id || null : null
-}
+type ProcessingConfigFormValues = z.infer<typeof processingConfigSchema>
 
 export function PokeDexterControl() {
-  const { theme } = useTheme()
-  const [chatflows, setChatflows] = useState<PokeChatFlow[]>([])
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [documentStores, setDocumentStores] = useState<DocumentStore[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [selectedChatflow, setSelectedChatflow] = useState<PokeChatFlow | null>(null)
-  const [selectedTab, setSelectedTab] = useState('chatflows')
-  const [analyticsRange, setAnalyticsRange] = useState<'24h' | '7d' | '30d'>('7d')
-  const [analyticsData, setAnalyticsData] = useState<any[]>([])
-  const [syncingMembers, setSyncingMembers] = useState<Record<string, boolean>>({})
-  const [selectedChatflows, setSelectedChatflows] = useState<Record<string, string | null>>({})
-
-  // Fetch chatflows
-  const fetchChatflows = async () => {
-    setIsLoading(true)
-    try {
-      console.debug('Fetching chatflows from ChatFlowsAPI...')
-      const flows = await ChatFlowsAPI.getChatFlows()
-      console.debug('Fetched chatflows:', {
-        count: flows?.length,
-        chatflows: flows?.map(cf => ({
-          id: cf.id,
-          name: cf.name
-        }))
-      })
-
-      // Convert API chatflows to our internal PokeChatFlow type
-      const convertedChatflows: PokeChatFlow[] = flows.map(cf => ({
-        ...cf,
-        flowData: '',
-        // Tool Agent Configuration
-        systemMessage: cf.systemMessage || 'You are PokéDexter, an advanced AI assistant.',
-        maxIterations: 10,
-        tools: [],
-        // ChatOpenAI Configuration
-        streaming: true,
-        // Memory Configuration
-        memoryBaseUrl: 'https://poke-gym-zep.moodmnky.com',
-        memorySessionId: '',
-        memoryWindow: 10,
-        // Legacy API compatibility
-        deployed: true,
-        apikeyid: '',
-        chatbotConfig: '',
-        speechToText: '',
-        followUpPrompts: '',
-        topP: 0.95,
-        frequencyPenalty: 0,
-        presencePenalty: 0
-      }))
-
-      setChatflows(convertedChatflows)
-
-      // Update default selections for family members if needed
-      if (familyMembers.length > 0) {
-        const defaultChatflowId = getDefaultChatflowId(convertedChatflows)
-        setSelectedChatflows(prev => {
-          const newSelections = { ...prev }
-          familyMembers.forEach(member => {
-            if (!newSelections[member.id]) {
-              newSelections[member.id] = member.chatflow_id || defaultChatflowId
-            }
-          })
-          return newSelections
-        })
-      }
-
-    } catch (error) {
-      console.error('Error in fetchChatflows:', error)
-      if (error instanceof Error && error.message.includes('configuration')) {
-        toast.error('Chatflow API configuration error. Please check your environment variables.')
-      } else {
-        toast.error('Failed to fetch chatflows. Please check Flowise server status.')
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const form = useForm<PokeChatFlow>({
+  const [activeTab, setActiveTab] = useState('chatflows')
+  const [selectedChatflow, setSelectedChatflow] = useState<ChatFlow | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const form = useForm<ChatflowFormValues>({
     resolver: zodResolver(chatflowSchema),
     defaultValues: {
       name: '',
-      flowData: '',
-      // Tool Agent Configuration
       systemMessage: 'You are PokéDexter, an advanced AI assistant.',
-      maxIterations: 10,
-      tools: [],
-      // ChatOpenAI Configuration
-      type: 'chat',
       temperature: 0.4,
-      streaming: true,
       maxTokens: 2000,
-      // Memory Configuration
       memoryType: 'zep',
-      memoryBaseUrl: 'https://poke-gym-zep.moodmnky.com',
-      memorySessionId: '',
       memoryWindow: 10,
-      // Metadata
+      memoryBaseUrl: '',
+      aiPrefix: 'ai',
+      humanPrefix: 'human',
       isPublic: false,
-      category: null,
-      // Legacy API compatibility
       deployed: true,
-      apikeyid: null,
-      chatbotConfig: null,
-      speechToText: null,
-      followUpPrompts: null,
-      topP: 0.95,
-      frequencyPenalty: 0,
-      presencePenalty: 0,
-      // Generated fields
-      apiConfig: null,
-      analytic: null
+      type: 'chat',
+      speechToText: false
     }
   })
 
+  // Load selected chatflow data into form
+  useEffect(() => {
+    if (selectedChatflow) {
+      try {
+        // Parse the flow data to get node configurations
+        const flowData = selectedChatflow.flowData ? JSON.parse(selectedChatflow.flowData) : { nodes: [] }
+        
+        // Find the Tool Agent node
+        const toolAgentNode = flowData.nodes?.find((node: any) => 
+          node.data?.name === 'toolAgent' || node.type === 'customNode'
+        )
+
+        // Find the ChatOpenAI node
+        const chatOpenAINode = flowData.nodes?.find((node: any) => 
+          node.data?.name === 'chatOpenAI'
+        )
+
+        // Find the Memory node
+        const memoryNode = flowData.nodes?.find((node: any) => 
+          node.data?.name === 'ZepMemory'
+        )
+
+        // Extract configurations and ensure number types
+        const formData = {
+          name: selectedChatflow.name || '',
+          systemMessage: toolAgentNode?.data?.inputs?.systemMessage || 'You are PokéDexter, an advanced AI assistant.',
+          temperature: Number(chatOpenAINode?.data?.inputs?.temperature) || 0.4,
+          maxTokens: Number(chatOpenAINode?.data?.inputs?.maxTokens) || 2000,
+          memoryType: memoryNode?.data?.inputs?.memoryType || 'zep',
+          memoryWindow: Number(memoryNode?.data?.inputs?.k) || 10,
+          memoryBaseUrl: memoryNode?.data?.inputs?.memoryBaseUrl || '',
+          aiPrefix: memoryNode?.data?.inputs?.aiPrefix || 'ai',
+          humanPrefix: memoryNode?.data?.inputs?.humanPrefix || 'human',
+          isPublic: Boolean(selectedChatflow.isPublic),
+          deployed: Boolean(selectedChatflow.deployed),
+          type: selectedChatflow.type || 'chat',
+          speechToText: Boolean(selectedChatflow.speechToText)
+        }
+
+        // Log the data being loaded
+        console.debug('Loading chatflow data:', {
+          original: selectedChatflow,
+          flowData,
+          formData
+        })
+
+        // Reset form with combined data
+        form.reset(formData)
+
+    } catch (error) {
+        console.error('Error loading chatflow configuration:', error)
+        toast.error('Failed to load chatflow configuration')
+      }
+    }
+  }, [selectedChatflow, form])
+
   // Handle form submission
-  const onSubmit = async (values: PokeChatFlow) => {
+  const onSubmit = async (data: ChatflowFormValues) => {
+    if (!selectedChatflow?.id) return
+    
+    setIsSubmitting(true)
     try {
-      setIsLoading(true)
-      console.debug('Submitting chatflow:', {
-        id: selectedChatflow?.id,
-        name: values.name,
-        isUpdate: !!selectedChatflow
+      // Parse existing flow data
+      const flowData = selectedChatflow.flowData ? JSON.parse(selectedChatflow.flowData) : { nodes: [] }
+      
+      console.debug('Original flow data:', flowData)
+
+      // Update Tool Agent node
+      const toolAgentNode = flowData.nodes?.find((node: any) => {
+        console.debug('Checking node:', node)
+        return node.data?.name === 'toolAgent' || 
+               node.type === 'customNode' || 
+               node.type === 'Tool Agent'
       })
-
-      // Create the chatflow data exactly matching the API format
-      const chatflowData = {
-        id: selectedChatflow?.id,
-        name: values.name,
-        flowData: JSON.stringify({
-          nodes: [],
-          edges: []
-        }),
-        deployed: true,
-        isPublic: values.isPublic || false,
-        type: values.type || 'chat',
-        apikeyid: values.apikeyid || '',
-        chatbotConfig: JSON.stringify({
-          systemMessage: values.systemMessage,
-          maxIterations: values.maxIterations,
-          tools: values.tools,
-          temperature: values.temperature,
-          streaming: values.streaming,
-          maxTokens: values.maxTokens,
-          memoryType: values.memoryType,
-          memoryBaseUrl: values.memoryBaseUrl,
-          memorySessionId: values.memorySessionId,
-          memoryWindow: values.memoryWindow,
-          topP: values.topP,
-          frequencyPenalty: values.frequencyPenalty,
-          presencePenalty: values.presencePenalty
-        }),
-        apiConfig: JSON.stringify({}),
-        analytic: JSON.stringify({}),
-        speechToText: JSON.stringify({}),
-        category: values.category || '',
-      }
-
-      console.debug('Saving chatflow with data:', chatflowData)
-
-      if (selectedChatflow?.id) {
-        await FlowiseAPI.updateChatflow(selectedChatflow.id, chatflowData)
-        toast.success('Chatflow updated successfully')
+      
+      if (toolAgentNode) {
+        toolAgentNode.data.inputs = {
+          ...toolAgentNode.data.inputs,
+          systemMessage: data.systemMessage
+        }
       } else {
-        await FlowiseAPI.createChatflow(chatflowData)
-        toast.success('Chatflow created successfully')
+        console.warn('Tool Agent node not found')
       }
 
-      setIsDialogOpen(false)
-      fetchChatflows()
-      form.reset()
-    } catch (error) {
-      console.error('Error in onSubmit:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to save chatflow')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Edit chatflow
-  const editChatflow = (chatflow: PokeChatFlow) => {
-    let config
-    try {
-      config = chatflow.chatbotConfig ? JSON.parse(chatflow.chatbotConfig) : {}
-    } catch (e) {
-      console.warn('Failed to parse chatbot config:', e)
-      config = {}
-    }
-
-    setSelectedChatflow(chatflow)
-    form.reset({
-      ...chatflow,
-      // Ensure all fields have values
-      name: chatflow.name,
-      type: chatflow.type || 'chat',
-      isPublic: chatflow.isPublic || false,
-      category: chatflow.category || null,
-      // Tool Agent Configuration
-      systemMessage: chatflow.systemMessage || form.getValues('systemMessage'),
-      maxIterations: config.maxIterations || 10,
-      tools: config.tools || [],
-      // ChatOpenAI Configuration
-      temperature: chatflow.temperature || 0.4,
-      streaming: config.streaming ?? true,
-      maxTokens: chatflow.maxTokens || 2000,
-      // Memory Configuration
-      memoryType: chatflow.memoryType || 'zep',
-      memoryBaseUrl: config.memoryBaseUrl || 'https://poke-gym-zep.moodmnky.com',
-      memorySessionId: config.memorySessionId || '',
-      memoryWindow: chatflow.memoryWindow || 10,
-      // Legacy API compatibility
-      apikeyid: chatflow.apikeyid || null,
-      speechToText: chatflow.speechToText || null,
-      followUpPrompts: chatflow.followUpPrompts || null,
-      topP: chatflow.topP || 0.95,
-      frequencyPenalty: chatflow.frequencyPenalty || 0,
-      presencePenalty: chatflow.presencePenalty || 0
-    })
-    setIsDialogOpen(true)
-  }
-
-  // Delete chatflow
-  const deleteChatflow = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this chatflow?')) return
-
-    try {
-      setIsLoading(true)
-      console.debug('Deleting chatflow:', { id })
-
-      // First, remove any references from family members
-      await FamilyMembersAPI.removeChatflowAssignments(id)
-
-      // Then delete the chatflow
-      await FlowiseAPI.deleteChatflow(id)
-      toast.success('Chatflow deleted successfully')
-      
-      // Refresh data
-      await Promise.all([
-        fetchChatflows(),
-        fetchFamilyMembers()
-      ])
-    } catch (error) {
-      console.error('Error deleting chatflow:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to delete chatflow')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Fetch family members
-  const fetchFamilyMembers = async () => {
-    try {
-      const data = await FamilyMembersAPI.getFamilyMembers()
-      setFamilyMembers(data)
-    } catch (error) {
-      console.error('Error fetching family members:', error)
-      toast.error('Failed to fetch family members')
-    }
-  }
-
-  // Modify handleChatflowSelection to use default when 'none' is selected
-  const handleChatflowSelection = (memberId: string, chatflowId: string | 'none') => {
-    setSelectedChatflows(prev => ({
-      ...prev,
-      [memberId]: chatflowId === 'none' ? getDefaultChatflowId(chatflows) : chatflowId
-    }))
-  }
-
-  // Initialize selectedChatflows with default values
-  useEffect(() => {
-    if (familyMembers.length > 0) {
-      const defaultChatflowId = getDefaultChatflowId(chatflows)
-      const defaultSelections = familyMembers.reduce((acc, member) => ({
-        ...acc,
-        [member.id]: member.chatflow_id || defaultChatflowId
-      }), {})
-      setSelectedChatflows(defaultSelections)
-    }
-  }, [familyMembers, chatflows])
-
-  // Modify handleChatflowSync to remove deployment check
-  async function handleChatflowSync(member: FamilyMember) {
-    try {
-      const selectedChatflowId = selectedChatflows[member.id]
-      console.debug('Starting chatflow sync:', {
-        memberId: member.id,
-        memberName: member.display_name,
-        currentChatflowId: member.chatflow_id,
-        selectedChatflowId,
-        timestamp: new Date().toISOString()
+      // Update ChatOpenAI node
+      const chatOpenAINode = flowData.nodes?.find((node: any) => {
+        console.debug('Checking node:', node)
+        return node.data?.name === 'chatOpenAI' || 
+               node.type === 'ChatOpenAI'
       })
-
-      setSyncingMembers(prev => ({ ...prev, [member.id]: true }))
-
-      // Verify chatflow exists
-      if (selectedChatflowId && selectedChatflowId !== 'none') {
-        const chatflow = chatflows.find(cf => cf.id === selectedChatflowId)
-        if (!chatflow) {
-          throw new Error(`Selected chatflow ${selectedChatflowId} not found`)
+      
+      if (chatOpenAINode) {
+        chatOpenAINode.data.inputs = {
+          ...chatOpenAINode.data.inputs,
+          temperature: Number(data.temperature),
+          maxTokens: Number(data.maxTokens)
         }
+      } else {
+        console.warn('ChatOpenAI node not found')
       }
 
-      // Update the assignment using the new API route
-      const finalChatflowId = selectedChatflowId === 'none' ? null : selectedChatflowId
-      const response = await fetch('/api/chatflows/link', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          memberId: member.id,
-          chatflowId: finalChatflowId
-        })
-      })
-
-      let errorData
-      if (!response.ok) {
-        try {
-          errorData = await response.json()
-        } catch (e) {
-          errorData = { error: response.statusText }
-        }
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`, { 
-          cause: errorData 
-        })
-      }
-
-      const result = await response.json()
-
-      // Show success message
-      toast.success(
-        finalChatflowId
-          ? `Assigned ${chatflows.find(cf => cf.id === finalChatflowId)?.name} to ${member.display_name}`
-          : `Removed chatflow from ${member.display_name}`
-      )
-
-      // Refresh the list
-      await fetchFamilyMembers()
-
-      console.debug('Successfully completed chatflow sync:', {
-        memberId: member.id,
-        memberName: member.display_name,
-        newChatflowId: finalChatflowId,
-        updatedMember: result.member,
-        timestamp: new Date().toISOString()
-      })
-
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      const errorDetails = {
-        memberId: member.id,
-        memberName: member.display_name,
-        currentChatflowId: member.chatflow_id,
-        selectedChatflowId: selectedChatflows[member.id],
-        error: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-          cause: error.cause instanceof Error ? {
-            name: error.cause.name,
-            message: error.cause.message,
-            stack: error.cause.stack
-          } : error.cause
-        } : String(error),
-        timestamp: new Date().toISOString()
-      }
-
-      // Log the full error details
-      console.error('Error syncing chatflow:', JSON.stringify(errorDetails, null, 2))
-
-      // Show error toast with description
-      toast.error('Failed to sync chatflow', {
-        description: errorMessage
+      // Update Memory node
+      const memoryNode = flowData.nodes?.find((node: any) => {
+        console.debug('Checking node:', node)
+        return node.data?.name === 'ZepMemory' || 
+               node.type === 'ZepMemory'
       })
       
-      // Reset selection to current value
-      setSelectedChatflows(prev => ({
-        ...prev,
-        [member.id]: member.chatflow_id || 'none'
-      }))
+      if (memoryNode) {
+        memoryNode.data.inputs = {
+          ...memoryNode.data.inputs,
+          k: Number(data.memoryWindow)
+        }
+      } else {
+        console.warn('Memory node not found')
+      }
 
+      // Update the chatflow
+      const updatePayload = {
+        ...selectedChatflow,
+        name: data.name,
+        isPublic: Boolean(data.isPublic),
+        deployed: Boolean(data.deployed),
+        type: data.type,
+        speechToText: data.speechToText ? 'true' : 'false',
+        flowData: JSON.stringify(flowData)
+      }
+
+      const response = await FlowiseAPI.updateChatflow(selectedChatflow.id, updatePayload)
+      console.debug('Update response:', response)
+
+      toast.success('Chatflow updated successfully')
+      setSelectedChatflow(null)
+    } catch (error) {
+      console.error('Error updating chatflow:', error)
+      if (error instanceof Error) {
+        toast.error(`Failed to update chatflow: ${error.message}`)
+      } else {
+        toast.error('Failed to update chatflow: Unknown error')
+      }
     } finally {
-      setSyncingMembers(prev => ({ ...prev, [member.id]: false }))
+      setIsSubmitting(false)
     }
   }
-
-  // Load initial data
-  useEffect(() => {
-    fetchChatflows()
-    fetchFamilyMembers()
-  }, [])
-
-  // Calculate analytics data
-  useEffect(() => {
-    const days = analyticsRange === '7d' ? 7 : analyticsRange === '30d' ? 30 : 1
-    const data = []
-    const now = new Date()
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now)
-      date.setDate(date.getDate() - i)
-      const dayMessages = messages.filter(m => 
-        new Date(m.createdDate).toDateString() === date.toDateString()
-      )
-      
-      data.push({
-        date: date.toLocaleDateString(),
-        messages: dayMessages.length,
-        positiveRatings: dayMessages.filter(m => m.rating === 'positive').length,
-        negativeRatings: dayMessages.filter(m => m.rating === 'negative').length,
-      })
-    }
-    
-    setAnalyticsData(data)
-  }, [messages, analyticsRange])
 
   return (
-    <div className="container mx-auto py-6">
-      <Tabs defaultValue="chatflows" className="space-y-4" onValueChange={setSelectedTab}>
-        <div className="flex items-center justify-between">
+    <Card className="flex-1">
+      <Tabs
+        defaultValue="chatflows"
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="p-6"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold">PokéDexter Control</h2>
           <TabsList>
-            <TabsTrigger value="chatflows" className="flex items-center gap-2">
-              <Bot className="w-4 h-4" />
+            <TabsTrigger value="chatflows">
+              <Bot className="w-4 h-4 mr-2" />
               Chatflows
             </TabsTrigger>
-            <TabsTrigger value="assignments" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Family Assignments
+            <TabsTrigger value="builder">
+              <Wand2 className="w-4 h-4 mr-2" />
+              Builder
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2">
-              <BarChart2 className="w-4 h-4" />
+            <TabsTrigger value="knowledge">
+              <Database className="w-4 h-4 mr-2" />
+              Knowledge Base
+            </TabsTrigger>
+            <TabsTrigger value="assistants">
+              <Users className="w-4 h-4 mr-2" />
+              Assistants
+            </TabsTrigger>
+            <TabsTrigger value="messages">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Messages
+            </TabsTrigger>
+            <TabsTrigger value="analytics">
+              <BarChart2 className="w-4 h-4 mr-2" />
               Analytics
             </TabsTrigger>
-            <TabsTrigger value="documents" className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Documents
+            <TabsTrigger value="settings">
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
             </TabsTrigger>
           </TabsList>
+        </div>
+
+        <TabsContent value="chatflows" className="space-y-4">
+          <ChatflowsList onSelect={setSelectedChatflow} />
           
-          {selectedTab === 'chatflows' && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => {
-                  setSelectedChatflow(null)
-                  form.reset({
-                    name: '',
-                    type: 'chat',
-                    deployed: false,
-                    isPublic: false,
-                    apikeyid: '',
-                    chatbotConfig: '',
-                    category: '',
-                    speechToText: '',
-                    followUpPrompts: '',
-                  })
-                }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Chatflow
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <Dialog open={!!selectedChatflow} onOpenChange={(open) => !open && setSelectedChatflow(null)}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>{selectedChatflow ? 'Edit Chatflow' : 'Create Chatflow'}</DialogTitle>
+                <DialogTitle>Edit Chatflow: {selectedChatflow?.name}</DialogTitle>
                   <DialogDescription>
-                    Configure your chatflow settings and behavior
+                  Update the configuration for this chatflow. Changes will be applied immediately.
                   </DialogDescription>
                 </DialogHeader>
+
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <Tabs defaultValue="basic" className="w-full">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <Tabs defaultValue="general" className="w-full">
                       <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                        <TabsTrigger value="ai">AI Configuration</TabsTrigger>
-                        <TabsTrigger value="memory">Memory Configuration</TabsTrigger>
+                        <TabsTrigger value="general">General</TabsTrigger>
+                        <TabsTrigger value="configuration">Configuration</TabsTrigger>
+                        <TabsTrigger value="features">Features</TabsTrigger>
                       </TabsList>
 
-                      <TabsContent value="basic" className="space-y-4 mt-4">
+                      <TabsContent value="general" className="space-y-4 mt-4">
                         <FormField
                           control={form.control}
                           name="name"
@@ -708,7 +409,67 @@ export function PokeDexterControl() {
                                 <Input {...field} placeholder="e.g., PokéDexter Assistant" />
                               </FormControl>
                               <FormDescription>
-                                A descriptive name for this AI assistant
+                                A descriptive name for this chatflow
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {selectedChatflow?.id && (
+                          <div className="space-y-2">
+                            <Label className="text-sm text-muted-foreground">Chatflow ID</Label>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 font-mono text-sm bg-muted px-3 py-2 rounded">
+                                {selectedChatflow.id}
+                              </code>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (selectedChatflow?.id) {
+                                    navigator.clipboard.writeText(selectedChatflow.id)
+                                    toast.success('Chatflow ID copied to clipboard')
+                                  }
+                                }}
+                                className="gap-2"
+                              >
+                                <Copy className="h-4 w-4" />
+                                Copy
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              This is your unique chatflow identifier
+                            </p>
+                          </div>
+                        )}
+
+                        <FormField
+                          control={form.control}
+                          name="type"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Type</FormLabel>
+                              <Select
+                                value={field.value}
+                                onValueChange={field.onChange}
+                              >
+                              <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select a type" />
+                                  </SelectTrigger>
+                              </FormControl>
+                                <SelectContent>
+                                  {CHATFLOW_TYPES.map(type => (
+                                    <SelectItem key={type.value} value={type.value}>
+                                      {type.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormDescription>
+                                The type of chatflow determines its behavior and capabilities
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
@@ -722,40 +483,22 @@ export function PokeDexterControl() {
                             <FormItem>
                               <FormLabel>System Message</FormLabel>
                               <FormControl>
+                                <div className="relative">
                                 <Textarea 
                                   {...field} 
-                                  placeholder="Define the AI's personality and behavior..."
-                                  rows={10}
-                                />
+                                    placeholder="Enter the system message for the AI"
+                                    className="min-h-[200px] max-h-[200px] resize-none pr-4
+                                      [&::-webkit-scrollbar]:w-1.5
+                                      [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10
+                                      hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20
+                                      [&::-webkit-scrollbar-track]:bg-transparent
+                                      transition-colors"
+                                  />
+                                  <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
+                                </div>
                               </FormControl>
                               <FormDescription>
-                                This message defines the AI's personality, role, and behavior guidelines
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="maxIterations"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Max Iterations</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  type="number" 
-                                  value={field.value ?? 10}
-                                  onChange={e => {
-                                    const value = e.target.value === '' ? 10 : parseInt(e.target.value)
-                                    field.onChange(value)
-                                  }}
-                                  min={1}
-                                  placeholder="Default: No limit"
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Maximum number of times the AI can use tools in a single response
+                                The system message that defines the AI's behavior
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
@@ -763,57 +506,46 @@ export function PokeDexterControl() {
                         />
                       </TabsContent>
 
-                      <TabsContent value="ai" className="space-y-4 mt-4">
-                          <FormField
-                            control={form.control}
-                          name="type"
-                            render={({ field }) => (
+                      <TabsContent value="configuration" className="space-y-4 mt-4">
+                        <FormField
+                          control={form.control}
+                          name="temperature"
+                          render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Model Type</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                              <FormLabel>Temperature: {field.value}</FormLabel>
                                 <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select AI model" />
-                                  </SelectTrigger>
+                                <Slider
+                                  min={0}
+                                  max={2}
+                                  step={0.1}
+                                  value={[Number(field.value)]}
+                                  onValueChange={([value]) => field.onChange(Number(value))}
+                                />
                                 </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="gpt-4o-mini">GPT-4 Mini</SelectItem>
-                                  <SelectItem value="gpt-4o">GPT-4 Optimized</SelectItem>
-                                  <SelectItem value="gpt-4">GPT-4</SelectItem>
-                                  <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                                </SelectContent>
-                              </Select>
                                   <FormDescription>
-                                Choose the OpenAI model to power this assistant
+                                Controls randomness in responses (0 = deterministic, 2 = very random)
                                   </FormDescription>
                               <FormMessage />
                               </FormItem>
                             )}
                           />
 
-                        <div className="grid grid-cols-2 gap-4">
                           <FormField
                             control={form.control}
-                            name="temperature"
+                          name="maxTokens"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Temperature</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    type="number" 
-                                    value={field.value ?? 0.4}
-                                    onChange={e => {
-                                      const value = e.target.value === '' ? 0.4 : parseFloat(e.target.value)
-                                      field.onChange(value)
-                                    }}
-                                    step={0.1}
-                                    min={0}
-                                    max={2}
-                                    placeholder="Default: 0.4"
-                                  />
-                                </FormControl>
-                                <FormDescription>
-                                  Lower values (0.2-0.4) for more focused responses
+                              <FormLabel>Max Tokens</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field} 
+                                  value={Number(field.value)}
+                                  onChange={e => field.onChange(Number(e.target.value))}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Maximum number of tokens in the response
                                 </FormDescription>
                                 <FormMessage />
                               </FormItem>
@@ -822,74 +554,338 @@ export function PokeDexterControl() {
 
                           <FormField
                             control={form.control}
-                            name="maxTokens"
+                          name="memoryWindow"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Max Tokens</FormLabel>
+                              <FormLabel>Memory Window</FormLabel>
                                 <FormControl>
                                   <Input 
                                     type="number" 
-                                    value={field.value ?? 2000}
-                                    onChange={e => {
-                                      const value = e.target.value === '' ? 2000 : parseInt(e.target.value)
-                                      field.onChange(value)
-                                    }}
-                                    min={1}
-                                    max={4000}
-                                    placeholder="Default: Model maximum"
+                                  {...field} 
+                                  value={Number(field.value)}
+                                  onChange={e => field.onChange(Number(e.target.value))}
                                   />
                                 </FormControl>
                                 <FormDescription>
-                                  Maximum length of AI responses
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
+                                Number of previous messages to include in context
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TabsContent>
 
+                      <TabsContent value="features" className="space-y-4 mt-4">
+                        <div className="grid gap-4 grid-cols-2">
                           <FormField
                             control={form.control}
-                          name="streaming"
+                            name="deployed"
                             render={({ field }) => (
-                            <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                              <div className="space-y-0.5">
-                                <FormLabel>Streaming Responses</FormLabel>
-                                <FormDescription>
-                                  Show responses as they are generated
-                                </FormDescription>
-                              </div>
+                              <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
                                 <FormControl>
                                 <Switch
                                   checked={field.value}
                                   onCheckedChange={field.onChange}
                                   />
                                 </FormControl>
+                                <div className="space-y-0.5">
+                                  <FormLabel>Deployment Status</FormLabel>
+                                <FormDescription>
+                                    Enable or disable this chatflow
+                                </FormDescription>
+                                </div>
                               </FormItem>
                             )}
                           />
+
+                        <FormField
+                          control={form.control}
+                            name="isPublic"
+                          render={({ field }) => (
+                              <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                                <div className="space-y-0.5">
+                                  <FormLabel>Public Access</FormLabel>
+                              <FormDescription>
+                                    Allow public access to this chatflow
+                              </FormDescription>
+                                </div>
+                            </FormItem>
+                          )}
+                        />
+
+                          <FormField
+                            control={form.control}
+                            name="speechToText"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                                <FormControl>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-0.5">
+                                  <FormLabel>Speech to Text</FormLabel>
+                                <FormDescription>
+                                    Enable voice input for this chatflow
+                                </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+
+                    <div className="flex justify-end gap-2 pt-4 border-t">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setSelectedChatflow(null)}
+                        disabled={isSubmitting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Update Chatflow
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+        </TabsContent>
+
+        <TabsContent value="builder" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Chatflow Builder</h3>
+              <p className="text-sm text-muted-foreground">
+                Create and configure chatflow templates
+              </p>
+            </div>
+            <Button className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              New Template
+            </Button>
+          </div>
+
+          <Form {...form}>
+            <form className="space-y-4">
+              <Tabs defaultValue="general" className="w-full">
+                <TabsList className="grid w-full grid-cols-5">
+                  <TabsTrigger value="general">
+                    <Bot className="w-4 h-4 mr-2" />
+                    General
+                  </TabsTrigger>
+                  <TabsTrigger value="model">
+                    <Cpu className="w-4 h-4 mr-2" />
+                    Model
+                  </TabsTrigger>
+                  <TabsTrigger value="memory">
+                    <HardDrive className="w-4 h-4 mr-2" />
+                    Memory
+                  </TabsTrigger>
+                  <TabsTrigger value="tools">
+                    <Wand2 className="w-4 h-4 mr-2" />
+                    Tools
+                  </TabsTrigger>
+                  <TabsTrigger value="advanced">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Advanced
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="general" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="e.g., PokéDexter Assistant" />
+                          </FormControl>
+                          <FormDescription>
+                            A descriptive name for this chatflow
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                          <FormField
+                            control={form.control}
+                          name="type"
+                            render={({ field }) => (
+                            <FormItem>
+                          <FormLabel>Type</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                                <FormControl>
+                                  <SelectTrigger>
+                                <SelectValue placeholder="Select a type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                              {CHATFLOW_TYPES.map(type => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ))}
+                                </SelectContent>
+                              </Select>
+                                  <FormDescription>
+                            The type of chatflow determines its behavior and capabilities
+                                  </FormDescription>
+                              <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                      name="systemMessage"
+                            render={({ field }) => (
+                              <FormItem>
+                          <FormLabel>System Message</FormLabel>
+                                <FormControl>
+                            <div className="relative">
+                              <Textarea 
+                                {...field} 
+                                placeholder="Enter the system message for the AI"
+                                className="min-h-[200px] max-h-[200px] resize-none pr-4
+                                  [&::-webkit-scrollbar]:w-1.5
+                                  [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10
+                                  hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20
+                                  [&::-webkit-scrollbar-track]:bg-transparent
+                                  transition-colors"
+                              />
+                              <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
+                            </div>
+                                </FormControl>
+                                <FormDescription>
+                            The system message that defines the AI's behavior
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="model" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                          <FormField
+                            control={form.control}
+                      name="temperature"
+                            render={({ field }) => (
+                              <FormItem>
+                          <FormLabel>Temperature: {field.value}</FormLabel>
+                                <FormControl>
+                            <div className="flex items-center gap-4">
+                              <Slider
+                                min={0}
+                                max={2}
+                                step={0.1}
+                                value={[Number(field.value)]}
+                                onValueChange={([value]) => field.onChange(Number(value))}
+                                className="flex-1"
+                              />
+                                  <Input 
+                                    type="number" 
+                                {...field}
+                                value={Number(field.value)}
+                                onChange={e => field.onChange(Number(e.target.value))}
+                                className="w-20"
+                              />
+                            </div>
+                                </FormControl>
+                                <FormDescription>
+                            Controls randomness in responses (0 = deterministic, 2 = very random)
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                      name="maxTokens"
+                            render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Max Tokens</FormLabel>
+                                <FormControl>
+                            <div className="flex items-center gap-4">
+                              <Slider
+                                min={1}
+                                max={4000}
+                                step={1}
+                                value={[Number(field.value)]}
+                                onValueChange={([value]) => field.onChange(Number(value))}
+                                className="flex-1"
+                              />
+                              <Input
+                                type="number"
+                                {...field}
+                                value={Number(field.value)}
+                                onChange={e => field.onChange(Number(e.target.value))}
+                                className="w-20"
+                              />
+                            </div>
+                                </FormControl>
+                          <FormDescription>
+                            Maximum number of tokens in the response (1-4000)
+                          </FormDescription>
+                          <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                  </div>
                       </TabsContent>
 
                       <TabsContent value="memory" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
                           <FormField
                             control={form.control}
                           name="memoryType"
                             render={({ field }) => (
                               <FormItem>
                               <FormLabel>Memory Type</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
                                 <FormControl>
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Choose memory type" />
+                                <SelectValue placeholder="Select memory type" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="none">No Memory</SelectItem>
-                                  <SelectItem value="zep">Zep Memory</SelectItem>
+                              {MEMORY_TYPES.map(type => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  <div className="flex flex-col gap-1">
+                                    <span>{type.label}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {type.description}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
                                 </SelectContent>
                               </Select>
                                 <FormDescription>
-                                Choose how the AI remembers conversation history
+                            Choose how the chatflow remembers conversation history
                                 </FormDescription>
                                 <FormMessage />
                               </FormItem>
@@ -897,7 +893,40 @@ export function PokeDexterControl() {
                           />
 
                         {form.watch('memoryType') === 'zep' && (
-                          <>
+                      <div className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="memoryWindow"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Memory Window Size</FormLabel>
+                              <FormControl>
+                                <div className="flex items-center gap-4">
+                                  <Slider
+                                    min={1}
+                                    max={50}
+                                    step={1}
+                                    value={[Number(field.value)]}
+                                    onValueChange={([value]) => field.onChange(Number(value))}
+                                    className="flex-1"
+                                  />
+                                  <Input
+                                    type="number"
+                                    {...field}
+                                    value={Number(field.value)}
+                                    onChange={e => field.onChange(Number(e.target.value))}
+                                    className="w-20"
+                                  />
+                                </div>
+                              </FormControl>
+                              <FormDescription>
+                                Number of previous messages to include in context (1-50)
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
                         <FormField
                           control={form.control}
                               name="memoryBaseUrl"
@@ -906,34 +935,33 @@ export function PokeDexterControl() {
                                   <FormLabel>Memory Server URL</FormLabel>
                                 <FormControl>
                                     <Input 
-                                      value={field.value ?? 'https://poke-gym-zep.moodmnky.com'}
-                                      onChange={(e) => field.onChange(e.target.value)}
-                                      placeholder="Default: https://poke-gym-zep.moodmnky.com"
+                                  {...field}
+                                  placeholder="https://your-zep-server.com"
                                     />
                                 </FormControl>
                               <FormDescription>
-                                    URL of your Zep memory server
+                                The URL of your Zep memory server
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
 
+                        <div className="grid grid-cols-2 gap-4">
                           <FormField
                             control={form.control}
-                              name="memorySessionId"
+                            name="aiPrefix"
                             render={({ field }) => (
                               <FormItem>
-                                  <FormLabel>Session ID</FormLabel>
+                                <FormLabel>AI Prefix</FormLabel>
                                 <FormControl>
                                   <Input 
-                                      value={field.value ?? ''}
-                                      onChange={(e) => field.onChange(e.target.value)}
-                                      placeholder="Optional: Custom session identifier"
+                                    {...field}
+                                    placeholder="ai"
                                   />
                                 </FormControl>
                                 <FormDescription>
-                                    Optional custom session ID for memory management
+                                  Prefix for AI messages in memory
                                 </FormDescription>
                                 <FormMessage />
                               </FormItem>
@@ -942,369 +970,239 @@ export function PokeDexterControl() {
 
                         <FormField
                           control={form.control}
-                              name="memoryWindow"
+                            name="humanPrefix"
                           render={({ field }) => (
                             <FormItem>
-                                  <FormLabel>Memory Window</FormLabel>
+                                <FormLabel>Human Prefix</FormLabel>
                               <FormControl>
                                     <Input 
-                                      type="number" 
-                                      value={field.value ?? 10}
-                                      onChange={e => {
-                                        const value = e.target.value === '' ? 10 : parseInt(e.target.value)
-                                        field.onChange(value)
-                                      }}
-                                      min={1}
-                                      max={50}
-                                      placeholder="Default: 10 messages"
+                                    {...field}
+                                    placeholder="human"
                                     />
                               </FormControl>
                               <FormDescription>
-                                    Number of previous messages to remember
+                                  Prefix for human messages in memory
                               </FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                          </>
+                        </div>
+                      </div>
                         )}
+                  </div>
                       </TabsContent>
-                    </Tabs>
 
-                    <DialogFooter>
-                      <Button type="submit">
-                        {selectedChatflow ? 'Update' : 'Create'}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          )}
+                <TabsContent value="tools" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                    <div className="border rounded-lg p-4">
+                      <h4 className="font-medium mb-2">Available Tools</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        {NODE_TYPES.map(node => (
+                          <Card key={node.value} className="p-4">
+                            <div className="space-y-2">
+                              <h5 className="font-medium">{node.label}</h5>
+                              <p className="text-sm text-muted-foreground">
+                                {node.description}
+                              </p>
+                              <Badge variant="secondary">
+                                {node.category}
+                          </Badge>
         </div>
-
-        <TabsContent value="chatflows" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Chatflows</CardTitle>
-              <CardDescription>
-                Manage your Flowise chatflows and configurations
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Memory</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Assignments</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {chatflows.map((chatflow) => {
-                      // Count family members using this chatflow
-                      const assignedMembers = familyMembers.filter(m => m.chatflow_id === chatflow.id).length
-
-                      return (
-                      <TableRow key={chatflow.id}>
-                        <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{chatflow.name}</span>
-                              <span className="text-sm text-muted-foreground">
-                                {chatflow.category || 'No category'}
-                              </span>
+                          </Card>
+                        ))}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                          <Badge variant="outline">
-                                {chatflow.type || 'chat'}
-                          </Badge>
-                              <span className="text-sm text-muted-foreground mt-1">
-                                Temp: {chatflow.temperature || 0.4}
-                              </span>
                             </div>
-                        </TableCell>
-                        <TableCell>
-                            <Badge variant={chatflow.memoryType === 'zep' ? 'default' : 'secondary'}>
-                              {chatflow.memoryType === 'zep' ? 'Zep Memory' : 'No Memory'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <Badge variant="default">Deployed</Badge>
-                            <Badge variant={chatflow.isPublic ? 'default' : 'outline'}>
-                              {chatflow.isPublic ? 'Public' : 'Private'}
-                            </Badge>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4 text-muted-foreground" />
-                              <span>{assignedMembers}</span>
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => editChatflow(chatflow)}
-                            title="Edit chatflow"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteChatflow(chatflow.id!)}
-                            title="Delete chatflow"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      )
-                    })}
-                    {chatflows.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center">
-                          No chatflows found
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
         </TabsContent>
 
-        <TabsContent value="assignments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Family Member Assignments</CardTitle>
-              <CardDescription>
-                Select a chatflow and click sync to assign it to a family member
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Member</TableHead>
-                      <TableHead>Chatflow</TableHead>
-                      <TableHead>Memory Session</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {familyMembers?.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell className="font-medium">
-                          {member.display_name}
-                        </TableCell>
-                        <TableCell>
-                          <ChatFlowSelect
-                            memberId={member.id}
-                            currentChatflowId={member.chatflow_id}
-                            onAssign={async (assignment) => {
-                              await fetchFamilyMembers()
-                              toast.success(`Assigned ${chatflows.find(cf => cf.id === assignment.chatflow_id)?.name} to ${member.display_name}`)
-                            }}
-                            onRemove={async () => {
-                              await fetchFamilyMembers()
-                              toast.success(`Removed chatflow from ${member.display_name}`)
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {member.chatflow_id ? `zep-${member.id.slice(0, 8)}` : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={member.chatflow_id ? 'default' : 'secondary'}>
-                            {member.chatflow_id ? 'Active' : 'No Chatflow'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {familyMembers.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center">
-                          No family members found
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                <TabsContent value="advanced" className="space-y-4 mt-4">
+                  <div className="grid gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="deployed"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-0.5">
+                              <FormLabel>Deployment Status</FormLabel>
+                              <FormDescription>
+                                Enable or disable this chatflow
+                              </FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="isPublic"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-0.5">
+                              <FormLabel>Public Access</FormLabel>
+                              <FormDescription>
+                                Allow public access to this chatflow
+                              </FormDescription>
               </div>
-            </CardContent>
-          </Card>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="speechToText"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-0.5">
+                              <FormLabel>Speech to Text</FormLabel>
+                              <FormDescription>
+                                Enable voice input for this chatflow
+                              </FormDescription>
+              </div>
+                          </FormItem>
+                        )}
+                      />
+              </div>
+
+                    <div className="border rounded-lg p-4">
+                      <h4 className="font-medium mb-2">Raw Configuration</h4>
+                      <Textarea
+                        className="font-mono text-sm"
+                        rows={20}
+                        value={JSON.stringify(form.getValues(), null, 2)}
+                        readOnly
+                      />
+                    </div>
+                    </div>
+        </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save Template
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </TabsContent>
+
+        <TabsContent value="knowledge" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+              <h3 className="text-lg font-medium">Knowledge Base</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage documents and training data for your chatflows
+              </p>
+                </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Upload className="w-4 h-4" />
+                  Upload Documents
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Upload Documents</DialogTitle>
+                  <DialogDescription>
+                    Upload documents to be processed and indexed for your chatflows.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <DocumentUploadForm onSuccess={() => {
+                  // Refresh document list
+                }} />
+              </DialogContent>
+            </Dialog>
+              </div>
+
+          <DocumentList />
+        </TabsContent>
+
+        <TabsContent value="assistants" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Assistant Profiles</h3>
+              <p className="text-sm text-muted-foreground">
+                Configure and manage assistant personalities
+              </p>
+                    </div>
+            <Button className="gap-2">
+              <UserPlus className="w-4 h-4" />
+              New Assistant
+            </Button>
+                    </div>
+          {/* Assistant management UI */}
+        </TabsContent>
+
+        <TabsContent value="messages" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Chat History</h3>
+              <p className="text-sm text-muted-foreground">
+                View and manage conversation history
+              </p>
+                    </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Filter
+              </Button>
+              <Button variant="outline" className="gap-2">
+                <Download className="w-4 h-4" />
+                Export
+              </Button>
+                    </div>
+              </div>
+          {/* Chat history and message management UI */}
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Analytics</CardTitle>
-                  <CardDescription>
-                    View usage statistics and performance metrics
-                  </CardDescription>
-                </div>
-                <Select
-                  value={analyticsRange}
-                  onValueChange={(value: '24h' | '7d' | '30d') => setAnalyticsRange(value)}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select range" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="24h">Last 24h</SelectItem>
-                    <SelectItem value="7d">Last 7 days</SelectItem>
-                    <SelectItem value="30d">Last 30 days</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Total Messages
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {messages.length}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Active Chatflows
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {chatflows.filter(cf => cf.deployed).length}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Positive Feedback
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {messages.filter(m => m.rating === 'positive').length}
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Document Stores
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {documentStores.length}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-              
-              <div className="h-[300px] w-full">
-                <LineChart
-                  width={800}
-                  height={300}
-                  data={analyticsData}
-                  margin={{
-                    top: 5,
-                    right: 30,
-                    left: 20,
-                    bottom: 5,
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="messages" stroke="#8884d8" name="Messages" />
-                  <Line type="monotone" dataKey="positiveRatings" stroke="#82ca9d" name="Positive Ratings" />
-                  <Line type="monotone" dataKey="negativeRatings" stroke="#ff7300" name="Negative Ratings" />
-                </LineChart>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Analytics & Feedback</h3>
+              <p className="text-sm text-muted-foreground">
+                Monitor performance and user feedback
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2">
+                <Calendar className="w-4 h-4" />
+                Date Range
+                          </Button>
+              <Button variant="outline" className="gap-2">
+                <Download className="w-4 h-4" />
+                Export Report
+                          </Button>
+            </div>
+          </div>
+          {/* Analytics dashboard and feedback management UI */}
         </TabsContent>
 
-        <TabsContent value="documents" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Store</CardTitle>
-              <CardDescription>
-                Manage your document stores and vector databases
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documentStores.map((store) => (
-                      <TableRow key={store.id}>
-                        <TableCell className="font-medium">{store.name}</TableCell>
-                        <TableCell>{store.description}</TableCell>
-                        <TableCell>
-                          <Badge variant={store.status === 'active' ? 'default' : 'secondary'}>
-                            {store.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="space-x-2">
-                          <Button variant="ghost" size="icon">
-                            <Search className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon">
-                            <Upload className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon">
-                            <Settings2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {documentStores.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center">
-                          No document stores found
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+        <TabsContent value="settings">
+          {/* Settings content */}
         </TabsContent>
       </Tabs>
-    </div>
+    </Card>
   )
 } 

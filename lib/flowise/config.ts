@@ -1,4 +1,4 @@
-import { FlowiseAPIError } from './api'
+import { FlowiseAPIError } from './errors'
 
 export interface FlowiseConfig {
   apiUrl: string

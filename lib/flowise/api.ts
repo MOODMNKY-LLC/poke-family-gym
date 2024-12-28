@@ -1,138 +1,357 @@
-import { ChatFlow } from '@/app/api/flowise/types'
+import type { 
+  Document, 
+  ProcessingConfig,
+  ChatFlow,
+  ChatFlowConfig,
+  ChatFlowResponse,
+  ChatFlowListResponse,
+  ChatFlowDeleteResponse
+} from '.'
+import { validateFlowiseConfig, FlowiseAPIError } from '.'
 
-const FLOWISE_API_URL = process.env.NEXT_PUBLIC_FLOWISE_API_URL
-const FLOWISE_API_KEY = process.env.NEXT_PUBLIC_FLOWISE_API_KEY
+export class FlowiseAPI {
+  private static async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const { apiUrl, apiKey } = validateFlowiseConfig()
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${apiUrl}${normalizedEndpoint}`
 
-// Helper function to validate Flowise configuration
-function validateFlowiseConfig() {
-  if (!FLOWISE_API_URL || !FLOWISE_API_KEY) {
-    throw new Error('Flowise API configuration missing')
-  }
-}
-
-// Helper function to make requests to Flowise API
-async function flowiseRequest(endpoint: string, options: RequestInit = {}) {
-  validateFlowiseConfig()
-
-  const url = `${FLOWISE_API_URL}/api/v1/${endpoint}`
-  const response = await fetch(url, {
-    ...options,
-    headers: {
+    const headers = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${FLOWISE_API_KEY}`,
-      ...options.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const contentType = response.headers.get('content-type')
-    let errorMessage: string
-
-    try {
-      if (contentType?.includes('application/json')) {
-        const errorData = await response.json()
-        errorMessage = errorData.error || JSON.stringify(errorData)
-      } else {
-        errorMessage = await response.text()
-      }
-    } catch (e) {
-      errorMessage = response.statusText || 'Unknown error occurred'
+      'Authorization': `Bearer ${apiKey}`,
+      ...options.headers
     }
 
-    throw new Error(errorMessage)
+    console.debug('Flowise API Request:', {
+      url,
+      method: options.method || 'GET',
+      headers: {
+        ...headers,
+        'Authorization': 'Bearer [REDACTED]'
+      }
+    })
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers
+      })
+
+      console.debug('Flowise API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      })
+
+      // Get response content type
+      const contentType = response.headers.get('content-type')
+      
+      // Get response text
+      const text = await response.text()
+      console.debug('Flowise API Response Body:', text.substring(0, 500))
+
+      // Check if response is HTML
+      if (contentType?.includes('text/html') || text.trim().startsWith('<!DOCTYPE')) {
+        console.error('Received HTML instead of JSON:', {
+          url,
+          contentType,
+          status: response.status,
+          statusText: response.statusText,
+          htmlPreview: text.substring(0, 500)
+        })
+
+        // Try to extract error message from HTML if possible
+        const errorMatch = text.match(/<pre>([^]*?)<\/pre>/)
+        const errorMessage = errorMatch ? errorMatch[1].trim() : 'Server returned HTML instead of JSON'
+
+        throw new FlowiseAPIError(
+          'Invalid API response: ' + errorMessage,
+          'INVALID_RESPONSE_TYPE',
+          { 
+            url, 
+            contentType,
+            htmlPreview: text.substring(0, 500),
+            status: response.status
+          }
+        )
+      }
+
+      // Try to parse JSON response
+      let data
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch (e) {
+        console.error('Error parsing JSON response:', {
+          error: e,
+          text: text.substring(0, 500),
+          url,
+          status: response.status
+        })
+        throw new FlowiseAPIError(
+          'Invalid JSON response from server',
+          'INVALID_JSON',
+          { 
+            url, 
+            status: response.status,
+            responseText: text.substring(0, 500)
+          }
+        )
+      }
+
+      // Handle API errors
+      if (!response.ok) {
+        throw new FlowiseAPIError(
+          data?.message || 'An error occurred',
+          data?.code || 'API_ERROR',
+          {
+            ...data?.details,
+            status: response.status,
+            url
+          }
+        )
+      }
+
+      // For list responses, wrap in the expected format if not already wrapped
+      if (Array.isArray(data) && endpoint.includes('/chatflows')) {
+        if (!data[0]?.id) {
+          console.warn('Unexpected chatflows response format:', data)
+        }
+        return {
+          chatflows: data,
+          total: data.length,
+          page: 1,
+          pageSize: data.length
+        } as T
+      }
+
+      return data as T
+    } catch (error) {
+      if (error instanceof FlowiseAPIError) {
+        throw error
+      }
+
+      console.error('Flowise API request failed:', error)
+      throw new FlowiseAPIError(
+        error instanceof Error ? error.message : 'Failed to communicate with Flowise API',
+        'CONNECTION_ERROR',
+        { originalError: error }
+      )
+    }
   }
 
-  return response.json()
+  static async getChatFlows(): Promise<ChatFlowListResponse> {
+    return this.request('/chatflows')
+  }
+
+  static async getChatFlow(id: string): Promise<ChatFlowResponse> {
+    return this.request(`/chatflows/${id}`)
+  }
+
+  static async createChatflow(data: Partial<ChatFlow>): Promise<ChatFlowResponse> {
+    return this.request('/chatflows', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  static async updateChatflow(
+    id: string,
+    data: Partial<ChatFlow>
+  ): Promise<ChatFlowResponse> {
+    return this.request(`/chatflows/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  }
+
+  static async deleteChatflow(id: string): Promise<ChatFlowDeleteResponse> {
+    return this.request(`/chatflows/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  static async validateChatflow(data: Partial<ChatFlow>): Promise<ChatFlowResponse> {
+    return this.request('/chatflows/validate', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  static async deployChatflow(id: string): Promise<ChatFlowResponse> {
+    return this.request(`/chatflows/${id}/deploy`, {
+      method: 'POST'
+    })
+  }
+
+  static async undeployChatflow(id: string): Promise<ChatFlowResponse> {
+    return this.request(`/chatflows/${id}/undeploy`, {
+      method: 'POST'
+    })
+  }
+
+  static async getChatflowConfig(id: string): Promise<ChatFlowConfig> {
+    return this.request(`/chatflows/${id}/config`)
+  }
+
+  static async updateChatflowConfig(
+    id: string,
+    config: Partial<ChatFlowConfig>
+  ): Promise<ChatFlowConfig> {
+    return this.request(`/chatflows/${id}/config`, {
+      method: 'PUT',
+      body: JSON.stringify(config)
+    })
+  }
 }
 
-// Flowise API functions
-export const FlowiseAPI = {
-  // Get all chatflows
-  async getChatflows(): Promise<ChatFlow[]> {
-    try {
-      const data = await flowiseRequest('chatflows')
-      return data
-    } catch (error) {
-      console.error('Error fetching chatflows:', error)
-      throw error
-    }
-  },
+export class DocumentStoreAPI {
+  private static async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const { apiUrl, apiKey } = validateFlowiseConfig()
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${apiUrl}${normalizedEndpoint}`
 
-  // Get a specific chatflow
-  async getChatflow(id: string): Promise<ChatFlow> {
-    try {
-      const data = await flowiseRequest(`chatflows/${id}`)
-      return data
-    } catch (error) {
-      console.error('Error fetching chatflow:', error)
-      throw error
+    const isFormData = options.body instanceof FormData
+    const headers = {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
+      ...options.headers
     }
-  },
 
-  // Create a new chatflow
-  async createChatflow(chatflow: Partial<ChatFlow>): Promise<ChatFlow> {
+    console.debug('Document Store API Request:', {
+      url,
+      method: options.method || 'GET',
+      headers: {
+        ...headers,
+        'Authorization': 'Bearer [REDACTED]'
+      }
+    })
+
     try {
-      const data = await flowiseRequest('chatflows', {
-        method: 'POST',
-        body: JSON.stringify(chatflow)
+      const response = await fetch(url, {
+        ...options,
+        headers
       })
-      return data
-    } catch (error) {
-      console.error('Error creating chatflow:', error)
-      throw error
-    }
-  },
 
-  // Update a chatflow
-  async updateChatflow(id: string, chatflow: Partial<ChatFlow>): Promise<ChatFlow> {
-    try {
-      const data = await flowiseRequest(`chatflows/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(chatflow)
+      console.debug('Document Store API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
       })
-      return data
-    } catch (error) {
-      console.error('Error updating chatflow:', error)
-      throw error
-    }
-  },
 
-  // Delete a chatflow
-  async deleteChatflow(id: string): Promise<void> {
-    try {
-      await flowiseRequest(`chatflows/${id}`, {
-        method: 'DELETE'
-      })
-    } catch (error) {
-      console.error('Error deleting chatflow:', error)
-      throw error
-    }
-  },
+      // Get response content type
+      const contentType = response.headers.get('content-type')
+      
+      // Get response text
+      const text = await response.text()
+      console.debug('Document Store API Response Body:', text.substring(0, 500))
 
-  // Deploy a chatflow
-  async deployChatflow(id: string): Promise<ChatFlow> {
-    try {
-      const data = await flowiseRequest(`chatflows/${id}/deploy`, {
-        method: 'POST'
-      })
-      return data
-    } catch (error) {
-      console.error('Error deploying chatflow:', error)
-      throw error
-    }
-  },
+      // Check if response is HTML
+      if (contentType?.includes('text/html') || text.trim().startsWith('<!DOCTYPE')) {
+        console.error('Received HTML instead of JSON:', {
+          url,
+          contentType,
+          status: response.status,
+          statusText: response.statusText,
+          htmlPreview: text.substring(0, 500)
+        })
 
-  // Undeploy a chatflow
-  async undeployChatflow(id: string): Promise<ChatFlow> {
-    try {
-      const data = await flowiseRequest(`chatflows/${id}/undeploy`, {
-        method: 'POST'
-      })
-      return data
+        // Try to extract error message from HTML if possible
+        const errorMatch = text.match(/<pre>([^]*?)<\/pre>/)
+        const errorMessage = errorMatch ? errorMatch[1].trim() : 'Server returned HTML instead of JSON'
+
+        throw new FlowiseAPIError(
+          'Invalid API response: ' + errorMessage,
+          'INVALID_RESPONSE_TYPE',
+          { 
+            url, 
+            contentType,
+            htmlPreview: text.substring(0, 500),
+            status: response.status
+          }
+        )
+      }
+
+      // Try to parse JSON response
+      let data
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch (e) {
+        console.error('Error parsing JSON response:', {
+          error: e,
+          text: text.substring(0, 500),
+          url,
+          status: response.status
+        })
+        throw new FlowiseAPIError(
+          'Invalid JSON response from server',
+          'INVALID_JSON',
+          { 
+            url, 
+            status: response.status,
+            responseText: text.substring(0, 500)
+          }
+        )
+      }
+
+      // Handle API errors
+      if (!response.ok) {
+        throw new FlowiseAPIError(
+          data?.message || 'An error occurred',
+          data?.code || 'API_ERROR',
+          {
+            ...data?.details,
+            status: response.status,
+            url
+          }
+        )
+      }
+
+      return data as T
     } catch (error) {
-      console.error('Error undeploying chatflow:', error)
-      throw error
+      if (error instanceof FlowiseAPIError) {
+        throw error
+      }
+
+      console.error('Document Store API request failed:', error)
+      throw new FlowiseAPIError(
+        error instanceof Error ? error.message : 'Failed to communicate with Document Store API',
+        'CONNECTION_ERROR',
+        { originalError: error }
+      )
     }
+  }
+
+  static async getDocuments(): Promise<Document[]> {
+    return this.request('/documentstore')
+  }
+
+  static async uploadDocuments(files: File[], config?: ProcessingConfig): Promise<Document[]> {
+    const formData = new FormData()
+    files.forEach(file => formData.append('files', file))
+    if (config) {
+      formData.append('config', JSON.stringify(config))
+    }
+
+    return this.request('/documentstore/upload', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  static async deleteDocument(id: string): Promise<void> {
+    return this.request(`/documentstore/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  static async getDocumentStatus(id: string): Promise<{ status: string }> {
+    return this.request(`/documentstore/status/${id}`)
   }
 } 

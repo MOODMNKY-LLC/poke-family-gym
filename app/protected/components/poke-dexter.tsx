@@ -124,7 +124,7 @@ function getDefaultChatflowId(chatflows: PokeChatFlow[]): string | null {
 
 async function validateChatflow(chatflowId: string): Promise<boolean> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/api/v1/chatflows/${chatflowId}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows/${chatflowId}`, {
       headers: {
         ...(process.env.NEXT_PUBLIC_FLOWISE_API_KEY && {
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
@@ -1112,13 +1112,15 @@ export function PokeDexter() {
   useEffect(() => {
     async function fetchChatflows() {
       try {
-        const data = await FlowiseAPI.getChatflows()
-        const convertedChatflows = data.filter(cf => cf.id).map(cf => ({
-          id: cf.id,
-          name: cf.name,
-          flowData: cf.flowData,
-          chatbotConfig: cf.chatbotConfig
-        }))
+        const data = await FlowiseAPI.getChatFlows()
+        const convertedChatflows = data.chatflows
+          .filter((cf): cf is Required<typeof cf> => Boolean(cf?.id))
+          .map(cf => ({
+            id: cf.id,
+            name: cf.name,
+            flowData: cf.flowData,
+            chatbotConfig: cf.chatbotConfig
+          }))
         setChatflows(convertedChatflows)
         
         // Set default chatflow

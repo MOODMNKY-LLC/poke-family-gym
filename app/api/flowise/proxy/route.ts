@@ -1,69 +1,132 @@
 import { NextResponse } from 'next/server'
 import { validateFlowiseConfig } from '@/app/lib/flowise/config'
+import axios, { AxiosError } from 'axios'
 
 export async function POST(request: Request) {
   try {
     const config = validateFlowiseConfig()
     const { endpoint, method = 'GET', body } = await request.json()
 
-    // Ensure endpoint starts with /api/v1
-    const apiPath = endpoint.startsWith('/api/v1') ? endpoint : `/api/v1${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
-    const url = `${config.apiUrl}${apiPath}`
+    // Remove any leading or trailing slashes from the endpoint and base URL
+    const cleanEndpoint = endpoint.replace(/^\/+|\/+$/g, '')
+    const baseUrl = config.apiUrl.replace(/\/+$/g, '')
 
-    console.debug('Proxy request to Flowise:', {
-      url,
+    // Always ensure we have the /api/v1 prefix
+    const apiPath = cleanEndpoint.startsWith('api/v1') ? cleanEndpoint : `api/v1/${cleanEndpoint}`
+    const url = `${baseUrl}/${apiPath}`
+
+    console.debug('[Flowise Proxy] Request:', {
+      originalEndpoint: endpoint,
+      cleanEndpoint,
+      baseUrl,
+      apiPath,
+      finalUrl: url,
       method,
-      hasBody: !!body
+      hasBody: !!body,
+      apiKey: config.apiKey ? '(set)' : '(missing)'
     })
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`
-      },
-      body: body ? JSON.stringify(body) : undefined
-    })
-
-    // Check for HTML response
-    const contentType = response.headers.get('content-type')
-    if (contentType?.includes('text/html')) {
-      const text = await response.text()
-      console.error('Received HTML response from Flowise:', {
-        status: response.status,
+    // Make direct request to Flowise API
+    try {
+      const response = await axios({
         url,
-        preview: text.substring(0, 200)
+        method,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        },
+        data: body,
+        validateStatus: null, // Don't throw on any status code
+        timeout: 10000 // 10 second timeout
       })
-      return NextResponse.json(
-        { error: 'Received HTML instead of JSON. Please check if Flowise server is running and accessible.' },
-        { status: 502 }
-      )
-    }
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Flowise API Error:', {
+      console.debug('[Flowise Proxy] Response:', {
         status: response.status,
         statusText: response.statusText,
-        error: errorText.substring(0, 200)
+        contentType: response.headers['content-type'],
+        dataType: typeof response.data,
+        isHtml: typeof response.data === 'string' && (
+          response.data.trim().startsWith('<!DOCTYPE') || 
+          response.data.trim().startsWith('<html')
+        )
       })
-      return NextResponse.json(
-        { error: `Flowise API error: ${response.status} ${response.statusText}` },
-        { status: response.status }
-      )
-    }
 
-    const data = await response.json()
-    return NextResponse.json(data)
+      // Handle HTML responses
+      if (
+        typeof response.data === 'string' && (
+          response.data.trim().startsWith('<!DOCTYPE') || 
+          response.data.trim().startsWith('<html')
+        )
+      ) {
+        console.error('[Flowise Proxy] Received HTML response:', {
+          url,
+          status: response.status,
+          preview: response.data.substring(0, 200)
+        })
+        
+        return NextResponse.json({
+          error: 'Received HTML instead of JSON response',
+          details: {
+            url,
+            status: response.status,
+            contentType: response.headers['content-type'],
+            preview: response.data.substring(0, 200)
+          }
+        }, { status: 502 })
+      }
+
+      // Handle successful JSON responses
+      if (response.headers['content-type']?.includes('application/json')) {
+        return NextResponse.json(response.data, { 
+          status: response.status,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+      }
+
+      // Handle unknown response types
+      return NextResponse.json({
+        error: 'Invalid response format',
+        details: {
+          url,
+          status: response.status,
+          contentType: response.headers['content-type'],
+          responseType: typeof response.data
+        }
+      }, { status: 502 })
+
+    } catch (requestError) {
+      console.error('[Flowise Proxy] Request failed:', {
+        error: requestError,
+        url,
+        method,
+        status: requestError instanceof AxiosError ? requestError.response?.status : undefined
+      })
+
+      if (requestError instanceof AxiosError) {
+        return NextResponse.json({
+          error: requestError.message,
+          details: {
+            code: requestError.code,
+            status: requestError.response?.status,
+            data: requestError.response?.data
+          }
+        }, { status: requestError.response?.status || 500 })
+      }
+
+      throw requestError // Let the outer catch handle other errors
+    }
   } catch (error) {
-    console.error('Proxy error:', error)
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : 'Internal server error',
-        details: error instanceof Error ? error.stack : undefined
-      },
-      { status: 500 }
-    )
+    console.error('[Flowise Proxy] Error:', error)
+
+    return NextResponse.json({
+      error: error instanceof Error ? error.message : 'Internal server error',
+      details: error instanceof Error ? { 
+        name: error.name,
+        stack: error.stack
+      } : undefined
+    }, { status: 500 })
   }
 } 

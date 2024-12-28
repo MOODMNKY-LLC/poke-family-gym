@@ -43,7 +43,7 @@ export async function flowiseRequest(endpoint: string, options: RequestInit = {}
     throw new FlowiseError('NEXT_PUBLIC_FLOWISE_API_KEY is not configured', 500)
   }
 
-  const url = `${FLOWISE_API_URL}/api/v1/${endpoint}`
+  const url = `${FLOWISE_API_URL}/${endpoint}`
   
   console.debug('Making Flowise request:', {
     url,
@@ -144,7 +144,7 @@ export async function flowiseUpload(
 ) {
   validateFlowiseConfig()
 
-  const url = `${FLOWISE_API_URL}/api/v1/${endpoint}`
+  const url = `${FLOWISE_API_URL}/${endpoint}`
   const headers = new Headers(options.headers)
   headers.set('Authorization', `Bearer ${FLOWISE_API_KEY}`)
   // Don't set Content-Type for multipart/form-data
