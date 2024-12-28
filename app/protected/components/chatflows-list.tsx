@@ -21,7 +21,8 @@ import {
   Mic,
   MessagesSquare,
   CheckCircle2,
-  XCircle
+  XCircle,
+  MicOff
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -40,6 +41,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
+import { Search } from "lucide-react"
 
 interface ChatflowsListProps {
   onSelect?: (chatflow: ChatFlow | null) => void
@@ -99,6 +102,7 @@ const kanbanColumns: KanbanColumn[] = [
 
 export function ChatflowsList({ onSelect }: ChatflowsListProps) {
   const [chatflows, setChatflows] = useState<ChatFlow[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [selectedChatflow, setSelectedChatflow] = useState<ChatFlow | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -253,7 +257,21 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
     }
   }
 
-  const renderTableView = () => (
+  // Filter chatflows based on search query
+  const filteredChatflows = chatflows.filter(chatflow => {
+    if (!searchQuery.trim()) return true
+    
+    const searchLower = searchQuery.toLowerCase()
+    const nameLower = chatflow.name.toLowerCase()
+    const systemPrompt = getSystemMessage(chatflow.flowData).toLowerCase()
+    const category = (chatflow.category || '').toLowerCase()
+    
+    return nameLower.includes(searchLower) || 
+           systemPrompt.includes(searchLower) ||
+           category.includes(searchLower)
+  })
+
+  const renderTableView = (chatflows: ChatFlow[]) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -261,7 +279,7 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
           <TableHead>Status</TableHead>
           <TableHead>Access</TableHead>
           <TableHead>Type</TableHead>
-          <TableHead>Features</TableHead>
+          <TableHead>TTS</TableHead>
           <TableHead>Flow Info</TableHead>
           <TableHead>Created</TableHead>
           <TableHead>Last Updated</TableHead>
@@ -285,10 +303,40 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
                       )}
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs whitespace-pre-wrap">
-                      {getSystemMessage(chatflow.flowData)}
-                    </p>
+                  <TooltipContent side="right" className="w-[300px] p-0">
+                    <div className="p-2 bg-muted/50 rounded-t-lg">
+                      <p className="text-sm font-medium">System Prompt</p>
+                    </div>
+                    <div 
+                      className="relative h-[120px] overflow-hidden group"
+                      onMouseEnter={(e) => {
+                        // Pause the animation on hover
+                        const target = e.currentTarget.querySelector('.scroll-content') as HTMLElement
+                        if (target) target.style.animationPlayState = 'paused'
+                      }}
+                      onMouseLeave={(e) => {
+                        // Resume the animation
+                        const target = e.currentTarget.querySelector('.scroll-content') as HTMLElement
+                        if (target) target.style.animationPlayState = 'running'
+                      }}
+                    >
+                      <div 
+                        className="scroll-content absolute inset-0 p-3 text-sm text-muted-foreground whitespace-pre-wrap
+                        overflow-y-auto hover:overflow-y-auto
+                        [&::-webkit-scrollbar]:w-2
+                        [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10
+                        hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20
+                        [&::-webkit-scrollbar-track]:bg-transparent
+                        animate-slow-scroll hover:animate-none
+                        "
+                        style={{
+                          maskImage: 'linear-gradient(to bottom, transparent, black 10px, black 90%, transparent)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 10px, black 90%, transparent)'
+                        }}
+                      >
+                        {getSystemMessage(chatflow.flowData)}
+                      </div>
+                    </div>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -351,32 +399,25 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
             </TableCell>
 
             <TableCell>
-              <div className="flex items-center gap-2">
-                {chatflow.speechToText && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Mic className="h-4 w-4 text-primary" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Speech to Text Enabled</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {chatflow.followUpPrompts && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <MessagesSquare className="h-4 w-4 text-primary" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Follow-up Prompts Enabled</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2">
+                      {!!chatflow.speechToText ? (
+                        <Mic className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <MicOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="text-sm text-muted-foreground">
+                        {!!chatflow.speechToText ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Text-to-speech is {!!chatflow.speechToText ? 'enabled' : 'disabled'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </TableCell>
 
             <TableCell>
@@ -385,23 +426,37 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
                 return (
                   <TooltipProvider>
                     <Tooltip>
-                      <TooltipTrigger>
+                      <TooltipTrigger asChild>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-xs">
                             {flow.nodeCount} nodes
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {flow.edges} edges
                           </Badge>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
                         <div className="space-y-1">
-                          <p>Nodes: {flow.nodeCount}</p>
-                          <p>Edges: {flow.edges}</p>
-                          <p>Memory: {flow.hasMemory ? 'Yes' : 'No'}</p>
-                          <p>OpenAI: {flow.hasOpenAI ? 'Yes' : 'No'}</p>
-                          <p>Tool Agent: {flow.hasToolAgent ? 'Yes' : 'No'}</p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {flow.nodeCount} nodes
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {flow.edges} edges
+                            </Badge>
+                          </div>
+                          <div className="space-y-1 mt-2">
+                            <p className="flex items-center gap-2">
+                              <Check className={`h-3 w-3 ${flow.hasMemory ? 'text-green-500' : 'text-muted-foreground'}`} />
+                              Memory Integration
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Check className={`h-3 w-3 ${flow.hasOpenAI ? 'text-green-500' : 'text-muted-foreground'}`} />
+                              OpenAI Integration
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Check className={`h-3 w-3 ${flow.hasToolAgent ? 'text-green-500' : 'text-muted-foreground'}`} />
+                              Tool Agent
+                            </p>
+                          </div>
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -471,7 +526,7 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
     </Table>
   )
 
-  const renderGalleryView = () => (
+  const renderGalleryView = (chatflows: ChatFlow[]) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {chatflows.map((chatflow) => (
         <Card key={chatflow.id} className="p-4">
@@ -673,7 +728,7 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
     </div>
   )
 
-  const renderKanbanView = () => (
+  const renderKanbanView = (chatflows: ChatFlow[]) => (
     <div className="grid grid-cols-4 gap-4 h-[calc(100vh-12rem)] overflow-hidden">
       {kanbanColumns.map((column) => (
         <div key={column.id} className="flex flex-col h-full">
@@ -785,9 +840,40 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium">Chatflows</h3>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-medium">Chatflow Management</h3>
+            <p className="text-sm text-muted-foreground">
+              Manage and monitor your AI chatflows, their configurations, and deployment status
+            </p>
+          </div>
+          <Button onClick={fetchChatflows} variant="outline" size="sm">
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Bot className="h-4 w-4" />
+            )}
+            <span className="ml-2">Refresh</span>
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-2xl">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, system prompt, or category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8"
+            />
+            {searchQuery && (
+              <p className="absolute -bottom-5 left-2 text-xs text-muted-foreground">
+                Found {filteredChatflows.length} of {chatflows.length} chatflows
+              </p>
+            )}
+          </div>
+          
           <div className="flex items-center border rounded-lg p-1">
             <Button
               variant={viewMode === 'table' ? 'secondary' : 'ghost'}
@@ -817,26 +903,27 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
               Kanban
             </Button>
           </div>
-
-          <Button onClick={fetchChatflows} variant="outline" size="sm">
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Bot className="h-4 w-4" />
-            )}
-            <span className="ml-2">Refresh</span>
-          </Button>
         </div>
       </div>
 
-      {chatflows.length === 0 ? (
+      {filteredChatflows.length === 0 ? (
         <Card className="p-6 text-center text-muted-foreground">
-          No chatflows found
+          {searchQuery ? (
+            <>
+              <p>No chatflows found matching "{searchQuery}"</p>
+              <p className="text-sm mt-1">Try adjusting your search terms or checking for typos</p>
+            </>
+          ) : (
+            <>
+              <p>No chatflows found</p>
+              <p className="text-sm mt-1">Create your first chatflow to get started</p>
+            </>
+          )}
         </Card>
       ) : (
-        viewMode === 'table' ? renderTableView() : 
-        viewMode === 'gallery' ? renderGalleryView() : 
-        renderKanbanView()
+        viewMode === 'table' ? renderTableView(filteredChatflows) : 
+        viewMode === 'gallery' ? renderGalleryView(filteredChatflows) : 
+        renderKanbanView(filteredChatflows)
       )}
     </div>
   )

@@ -32,7 +32,8 @@ import {
   UserPlus,
   Filter,
   Download,
-  Calendar
+  Calendar,
+  Link as LinkIcon
 } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -68,6 +69,7 @@ import { DocumentList } from './document-list'
 import { DocumentStoreAPI } from '@/lib/flowise/api'
 import type { Document, ProcessingConfig } from '@/lib/flowise/types'
 import { DocumentUploadForm } from './document-upload-form'
+import { ChatflowAssignments } from './chatflow-assignments'
 
 // Config types
 interface ChatbotConfig {
@@ -350,21 +352,13 @@ export function PokeDexterControl() {
               <Bot className="w-4 h-4 mr-2" />
               Chatflows
             </TabsTrigger>
+            <TabsTrigger value="assignments">
+              <LinkIcon className="w-4 h-4 mr-2" />
+              Assignments
+            </TabsTrigger>
             <TabsTrigger value="builder">
               <Wand2 className="w-4 h-4 mr-2" />
               Builder
-            </TabsTrigger>
-            <TabsTrigger value="knowledge">
-              <Database className="w-4 h-4 mr-2" />
-              Knowledge Base
-            </TabsTrigger>
-            <TabsTrigger value="assistants">
-              <Users className="w-4 h-4 mr-2" />
-              Assistants
-            </TabsTrigger>
-            <TabsTrigger value="messages">
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Messages
             </TabsTrigger>
             <TabsTrigger value="analytics">
               <BarChart2 className="w-4 h-4 mr-2" />
@@ -661,6 +655,10 @@ export function PokeDexterControl() {
                 </Form>
               </DialogContent>
             </Dialog>
+        </TabsContent>
+
+        <TabsContent value="assignments" className="space-y-4">
+          <ChatflowAssignments />
         </TabsContent>
 
         <TabsContent value="builder" className="space-y-6">
@@ -1008,10 +1006,10 @@ export function PokeDexterControl() {
                               <Badge variant="secondary">
                                 {node.category}
                           </Badge>
-        </div>
+                            </div>
                           </Card>
                         ))}
-                            </div>
+                          </div>
                             </div>
                           </div>
         </TabsContent>
@@ -1077,7 +1075,7 @@ export function PokeDexterControl() {
                               <FormDescription>
                                 Enable voice input for this chatflow
                               </FormDescription>
-              </div>
+                </div>
                           </FormItem>
                         )}
                       />
@@ -1106,77 +1104,6 @@ export function PokeDexterControl() {
           </Form>
         </TabsContent>
 
-        <TabsContent value="knowledge" className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-              <h3 className="text-lg font-medium">Knowledge Base</h3>
-              <p className="text-sm text-muted-foreground">
-                Manage documents and training data for your chatflows
-              </p>
-                </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="gap-2">
-                  <Upload className="w-4 h-4" />
-                  Upload Documents
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Upload Documents</DialogTitle>
-                  <DialogDescription>
-                    Upload documents to be processed and indexed for your chatflows.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <DocumentUploadForm onSuccess={() => {
-                  // Refresh document list
-                }} />
-              </DialogContent>
-            </Dialog>
-              </div>
-
-          <DocumentList />
-        </TabsContent>
-
-        <TabsContent value="assistants" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium">Assistant Profiles</h3>
-              <p className="text-sm text-muted-foreground">
-                Configure and manage assistant personalities
-              </p>
-                    </div>
-            <Button className="gap-2">
-              <UserPlus className="w-4 h-4" />
-              New Assistant
-            </Button>
-                    </div>
-          {/* Assistant management UI */}
-        </TabsContent>
-
-        <TabsContent value="messages" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium">Chat History</h3>
-              <p className="text-sm text-muted-foreground">
-                View and manage conversation history
-              </p>
-                    </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="gap-2">
-                <Filter className="w-4 h-4" />
-                Filter
-              </Button>
-              <Button variant="outline" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
-                    </div>
-              </div>
-          {/* Chat history and message management UI */}
-        </TabsContent>
-
         <TabsContent value="analytics" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -1199,7 +1126,7 @@ export function PokeDexterControl() {
           {/* Analytics dashboard and feedback management UI */}
         </TabsContent>
 
-        <TabsContent value="settings">
+        <TabsContent value="settings" className="space-y-4">
           {/* Settings content */}
         </TabsContent>
       </Tabs>

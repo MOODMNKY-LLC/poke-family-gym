@@ -113,13 +113,16 @@ interface AnalyticsConfig {
   };
 }
 
-function getDefaultChatflowId(chatflows: PokeChatFlow[]): string | null {
-  // First try env var
-  const envDefault = process.env.NEXT_PUBLIC_FLOWISE_CHATFLOW_ID
-  if (envDefault) return envDefault
+function getDefaultChatflowId(chatflows: PokeChatFlow[]): string {
+  // First try to find the PokéDexter chatflow
+  const pokeDexter = chatflows.find(cf => cf.name.toLowerCase().includes('pokedexter'))
+  if (pokeDexter?.id) return pokeDexter.id
   
-  // Otherwise use first chatflow from list
-  return chatflows.length > 0 ? chatflows[0].id || null : null
+  // Otherwise use the first available chatflow
+  if (chatflows[0]?.id) return chatflows[0].id
+  
+  // If no chatflows available, return empty string
+  return ''
 }
 
 async function validateChatflow(chatflowId: string): Promise<boolean> {
@@ -598,6 +601,154 @@ export function PokeDexter() {
     }
   }, [selectedMember, currentChatflowId, chatflows])
 
+  // Update the socket connection setup with proper types
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_FLOWISE_API_URL) {
+      console.error('NEXT_PUBLIC_FLOWISE_API_URL is not configured')
+      return
+    }
+
+    let reconnectAttempts = 0
+    const maxReconnectAttempts = 5
+    const reconnectDelay = 2000 // 2 seconds
+
+    function setupSocket() {
+      try {
+        console.debug('Initializing socket connection...')
+        
+        // Initialize socket connection with retry options
+        const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL || '', {
+          transports: ['websocket', 'polling'],
+          path: '/socket.io',
+          reconnection: true,
+          reconnectionAttempts: maxReconnectAttempts,
+          reconnectionDelay: reconnectDelay
+        })
+        socketRef.current = socket
+
+        socket.on('connect', () => {
+          console.debug('Socket connected:', socket.id)
+          setSocketId(socket.id)
+          reconnectAttempts = 0 // Reset attempts on successful connection
+        })
+
+        socket.on('connect_error', (error: Error) => {
+          console.warn('Socket connection error:', error)
+          reconnectAttempts++
+          if (reconnectAttempts >= maxReconnectAttempts) {
+            console.error('Max reconnection attempts reached')
+            setError('Failed to establish chat connection after multiple attempts')
+          }
+        })
+
+        socket.on('error', (error: Error) => {
+          console.error('Socket error:', error)
+          setError(`Socket error: ${error?.message || 'Unknown error'}`)
+        })
+
+        socket.on('disconnect', (reason: string) => {
+          console.debug('Socket disconnected:', reason)
+          setSocketId(null)
+          
+          // Attempt manual reconnection for certain disconnect reasons
+          if (reason === 'transport close' || reason === 'ping timeout') {
+            setTimeout(() => {
+              if (reconnectAttempts < maxReconnectAttempts) {
+                console.debug('Attempting to reconnect...')
+                socket.connect()
+              }
+            }, reconnectDelay)
+          }
+        })
+
+        return socket
+      } catch (error) {
+        console.error('Socket initialization error:', error)
+        setError('Failed to initialize chat connection')
+        return null
+      }
+    }
+
+    const socket = setupSocket()
+
+    // Cleanup on unmount
+    return () => {
+      if (socket) {
+        console.debug('Cleaning up socket connection')
+        socket.removeAllListeners()
+        socket.disconnect()
+      }
+    }
+  }, [])
+
+  // Update the chatflow switching effect
+  useEffect(() => {
+    async function updateChatflowAndMessage() {
+      console.debug('Member selection changed:', {
+        memberId: selectedMember?.id,
+        memberName: selectedMember?.display_name,
+        assignedChatflowId: selectedMember?.chatflow_id
+      })
+
+      // Reset messages when member changes
+      setMessages([])
+      
+      if (selectedMember?.chatflow_id) {
+        // Find the assigned chatflow
+        const assignedChatflow = chatflows.find(cf => cf.id === selectedMember.chatflow_id)
+        console.debug('Found assigned chatflow:', assignedChatflow?.name)
+        
+        if (assignedChatflow) {
+          console.debug('Validating chatflow:', assignedChatflow.id)
+          const isValid = await validateChatflow(selectedMember.chatflow_id)
+          
+          if (isValid) {
+            console.debug('Chatflow validated, switching to:', assignedChatflow.name)
+            setCurrentChatflowId(selectedMember.chatflow_id)
+            setMessages([{
+              id: '1',
+              content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent (${assignedChatflow.name}). How can I help you today?`,
+              role: 'assistant',
+              createdAt: new Date().toISOString()
+            }])
+            return
+          }
+          console.warn('Chatflow validation failed:', selectedMember.chatflow_id)
+        } else {
+          console.warn('Assigned chatflow not found:', selectedMember.chatflow_id)
+        }
+      }
+      
+      // Fallback logic
+      const defaultId = getDefaultChatflowId(chatflows)
+      console.debug('Using default chatflow:', defaultId)
+      setCurrentChatflowId(defaultId)
+      
+      if (selectedMember) {
+        console.debug('Setting member-specific message for:', selectedMember.display_name)
+        setMessages([{
+          id: '1',
+          content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent. How can I help you today?`,
+          role: 'assistant',
+          createdAt: new Date().toISOString()
+        }])
+      } else {
+        console.debug('Setting default PokéDexter message')
+        setMessages([{
+          id: '1',
+          content: "Hi! I'm PokéDexter, your personal Pokémon assistant. Select a family member to chat with their personal AI agent, or chat with me for general assistance!",
+          role: 'assistant',
+          createdAt: new Date().toISOString()
+        }])
+      }
+    }
+
+    // Only run if we have chatflows loaded
+    if (chatflows.length > 0) {
+      updateChatflowAndMessage()
+    }
+  }, [selectedMember, chatflows])
+
   function getAvatarUrl(member: FamilyMember): string {
     if (!member.avatar_url) return theme === 'dark' ? '/images/pokeball-dark.svg' : '/images/pokeball-light.svg'
     
@@ -850,49 +1001,6 @@ export function PokeDexter() {
     }
   }
 
-  // Update the socket connection setup
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_FLOWISE_API_URL) {
-      console.error('NEXT_PUBLIC_FLOWISE_API_URL is not configured')
-      return
-    }
-
-    try {
-      // Initialize socket connection
-      const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL, {
-        transports: ['websocket', 'polling'],
-        path: '/socket.io'
-      })
-      socketRef.current = socket
-
-      socket.on('connect', () => {
-        console.debug('Socket connected:', socket.id)
-        setSocketId(socket.id)
-      })
-
-      socket.on('error', (error: any) => {
-        console.error('Socket error:', error)
-        setError(`Socket error: ${error?.message || 'Unknown error'}`)
-      })
-
-      socket.on('disconnect', () => {
-        console.debug('Socket disconnected')
-        setSocketId(null)
-      })
-
-      // Cleanup on unmount
-      return () => {
-        if (socket) {
-          socket.removeAllListeners()
-          socket.disconnect()
-        }
-      }
-    } catch (error) {
-      console.error('Socket initialization error:', error)
-      setError('Failed to initialize chat connection')
-    }
-  }, [])
-
   // Update handleSendMessage function
   async function handleSendMessage(e?: React.FormEvent, voiceMessage?: Message) {
     e?.preventDefault()
@@ -935,7 +1043,14 @@ export function PokeDexter() {
     setIsLoading(true)
 
     try {
-      const chatflowId = selectedMember?.chatflow_id || currentChatflowId
+      // Use the current chatflow ID or fall back to default
+      const chatflowId = currentChatflowId || getDefaultChatflowId(chatflows)
+      console.debug('Using chatflow for message:', {
+        chatflowId,
+        memberName: selectedMember?.display_name,
+        memberId: selectedMember?.id
+      })
+
       if (!chatflowId) {
         throw new Error('No chatflow available')
       }
