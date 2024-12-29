@@ -211,3 +211,65 @@ The API client throws `FlowiseAPIError` with these common codes:
 - `app/protected/components/poke-dexter-control.tsx`: Control panel component
 - `scripts/list-chatflows.ts`: Utility script for listing chatflows
 - `instructions/_PokeDexter Chatflow.json`: Example chatflow configuration 
+
+## Socket Connection Setup
+
+The socket connection should be configured with the base URL only, as `/api/v1` is already included:
+
+```typescript
+const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL || '', {
+  transports: ['websocket', 'polling'],
+  path: '/socket.io',  // Do NOT include /api/v1 here
+  reconnection: true,
+  reconnectionAttempts: maxReconnectAttempts,
+  reconnectionDelay: reconnectDelay
+})
+```
+
+## Chatflow Switching
+
+When switching between family members, their assigned chatflows are handled as follows:
+
+1. **Member Selection**:
+   ```typescript
+   // When a member is selected, check for their assigned chatflow
+   if (selectedMember?.chatflow_id) {
+     const assignedChatflow = chatflows.find(cf => cf.id === selectedMember.chatflow_id)
+     if (assignedChatflow?.id) {
+       // Validate and switch to the assigned chatflow
+       const isValid = await validateChatflow(assignedChatflow.id)
+       if (isValid) {
+         setCurrentChatflowId(assignedChatflow.id)
+       }
+     }
+   }
+   ```
+
+2. **Fallback Logic**:
+   ```typescript
+   // If no valid chatflow is assigned, use the default
+   const defaultId = getDefaultChatflowId(chatflows)
+   setCurrentChatflowId(defaultId)
+   ```
+
+3. **Member Data Query**:
+   ```typescript
+   // Include chatflow_id when fetching family members
+   const { data: members } = await supabase
+     .from('family_members')
+     .select(`
+       id,
+       family_id,
+       display_name,
+       role_id,
+       chatflow_id
+     `)
+   ```
+
+## Important Notes
+
+1. The `NEXT_PUBLIC_FLOWISE_API_URL` environment variable should already include `/api/v1`
+2. Socket connection path should be just `/socket.io`
+3. Always validate chatflows before switching to ensure they are accessible
+4. Include proper error handling and fallback to default chatflow when needed
+5. Ensure the family members query includes the `chatflow_id` field 

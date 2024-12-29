@@ -687,7 +687,8 @@ export function PokeDexter() {
       console.debug('Member selection changed:', {
         memberId: selectedMember?.id,
         memberName: selectedMember?.display_name,
-        assignedChatflowId: selectedMember?.chatflow_id
+        assignedChatflowId: selectedMember?.chatflow_id,
+        currentChatflowId
       })
 
       // Reset messages when member changes
@@ -698,13 +699,13 @@ export function PokeDexter() {
         const assignedChatflow = chatflows.find(cf => cf.id === selectedMember.chatflow_id)
         console.debug('Found assigned chatflow:', assignedChatflow?.name)
         
-        if (assignedChatflow) {
+        if (assignedChatflow?.id) {
           console.debug('Validating chatflow:', assignedChatflow.id)
-          const isValid = await validateChatflow(selectedMember.chatflow_id)
+          const isValid = await validateChatflow(assignedChatflow.id)
           
           if (isValid) {
             console.debug('Chatflow validated, switching to:', assignedChatflow.name)
-            setCurrentChatflowId(selectedMember.chatflow_id)
+            setCurrentChatflowId(assignedChatflow.id)
             setMessages([{
               id: '1',
               content: `Hi! I'm ${selectedMember.display_name}'s personal AI agent (${assignedChatflow.name}). How can I help you today?`,
@@ -713,7 +714,7 @@ export function PokeDexter() {
             }])
             return
           }
-          console.warn('Chatflow validation failed:', selectedMember.chatflow_id)
+          console.warn('Chatflow validation failed:', assignedChatflow.id)
         } else {
           console.warn('Assigned chatflow not found:', selectedMember.chatflow_id)
         }
@@ -794,7 +795,8 @@ export function PokeDexter() {
             updated_at,
             starter_pokemon_form_id,
             starter_pokemon_nickname,
-            starter_pokemon_obtained_at
+            starter_pokemon_obtained_at,
+            chatflow_id
           `)
           .eq('family_id', user.id)
           .order('created_at', { ascending: true })
