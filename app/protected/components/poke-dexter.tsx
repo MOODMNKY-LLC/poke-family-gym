@@ -454,26 +454,51 @@ const MessageBubble = ({
             {message.error ? (
               message.content
             ) : (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={MarkdownComponents}
-                className={cn(
-                  "prose prose-sm max-w-none",
-                  isUser 
-                    ? "prose-invert" 
-                    : "prose-neutral dark:prose-invert"
+              <>
+                {message.uploads?.map((upload, index) => (
+                  <div key={index} className={cn(
+                    "first:mt-0",
+                    message.content && "mb-2",
+                    "max-w-[min(calc(100vw-8rem),400px)]", // Constrain width dynamically
+                    "min-w-[200px]" // Minimum width
+                  )}>
+                    {upload.mime.startsWith('image/') && (
+                      <div className="relative w-full">
+                        <img
+                          src={upload.data}
+                          alt={upload.name}
+                          className={cn(
+                            "rounded-lg w-full h-auto",
+                            "object-contain",
+                            "min-h-[100px]",
+                            "max-h-[300px]",
+                            "hover:cursor-pointer"
+                          )}
+                          onClick={() => {
+                            // Open image in new tab for full view
+                            window.open(upload.data, '_blank')
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {message.content && (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                    components={MarkdownComponents}
+                    className={cn(
+                      "prose prose-sm max-w-none",
+                      isUser 
+                        ? "prose-invert" 
+                        : "prose-neutral dark:prose-invert"
+                    )}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
                 )}
-              >
-                {message.content}
-              </ReactMarkdown>
-            )}
-            {message.image && (
-              <img
-                src={message.image}
-                alt="Uploaded content"
-                className="mt-2 rounded-lg max-w-sm"
-              />
+              </>
             )}
           </div>
         </div>
@@ -831,10 +856,9 @@ export function PokeDexter() {
     if (files.length === 0) return
 
     setSelectedFiles(files)
-    setIsLoading(true)
 
     try {
-      // Create preview message immediately
+      // Create uploads array from files
       const uploads = await Promise.all(
         files.map(async (file): Promise<FileUpload> => {
           return new Promise((resolve, reject) => {
@@ -856,7 +880,7 @@ export function PokeDexter() {
       // Add preview message to chat
       const previewMessage: Message = {
         id: uuidv4(),
-        content: '',
+        content: inputMessage, // Include any existing input message
         role: 'user',
         createdAt: new Date().toISOString(),
         uploads
@@ -865,8 +889,6 @@ export function PokeDexter() {
     } catch (error) {
       console.error('Error processing images:', error)
       setError('Failed to process images')
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -1007,6 +1029,8 @@ export function PokeDexter() {
   async function handleSendMessage(e?: React.FormEvent, voiceMessage?: Message) {
     e?.preventDefault()
     const content = inputMessage.trim()
+    
+    // Don't proceed if there's no content and no files/voice message
     if (!content && !voiceMessage && selectedFiles.length === 0) return
 
     setError(null)
@@ -1016,15 +1040,16 @@ export function PokeDexter() {
 
     // Find the preview message if it exists
     const lastMessage = messages[messages.length - 1]
-    const isPreview = lastMessage?.role === 'user' && lastMessage?.content === '' && lastMessage?.uploads
+    const isPreview = lastMessage?.role === 'user' && lastMessage?.uploads
 
     let userMessage: Message
     if (isPreview) {
       // Update the preview message with the content
       userMessage = {
         ...lastMessage,
-        content
+        content: content || 'Uploaded image' // Use content or default text
       }
+      // Update the message in the state
       setMessages(prev => prev.map(msg => 
         msg.id === lastMessage.id 
           ? userMessage
@@ -1032,9 +1057,9 @@ export function PokeDexter() {
       ))
     } else {
       // Create a new message
-      userMessage = {
+      userMessage = voiceMessage || {
         id: uuidv4(),
-        content,
+        content: content || 'Uploaded image', // Use content or default text
         role: 'user',
         createdAt: new Date().toISOString(),
         uploads: lastMessage?.uploads
