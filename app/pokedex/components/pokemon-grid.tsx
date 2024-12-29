@@ -109,67 +109,89 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
     switch (viewMode) {
       case "grid":
         return (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 auto-rows-max">
             {getCurrentPagePokemon().map((p) => (
               <PokemonCard key={p.id} pokemon={p} />
             ))}
           </div>
         )
       case "table":
-        return <PokemonTable pokemon={getCurrentPagePokemon()} />
+        return (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[640px] p-4 sm:p-0">
+              <PokemonTable pokemon={getCurrentPagePokemon()} />
+            </div>
+          </div>
+        )
       case "kanban":
-        return <PokemonKanban pokemon={getCurrentPagePokemon()} />
+        return (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[768px] p-4 sm:p-0">
+              <PokemonKanban pokemon={getCurrentPagePokemon()} />
+            </div>
+          </div>
+        )
       case "stats":
-        return <PokemonStatsGrid pokemon={getCurrentPagePokemon()} />
+        return (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[640px] p-4 sm:p-0">
+              <PokemonStatsGrid pokemon={getCurrentPagePokemon()} />
+            </div>
+          </div>
+        )
       default:
         return null
     }
   }
 
   return (
-    <div className="space-y-6">
-      {/* Controls Row - Keep outside ScrollArea */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        {!initialPokemon && (
-          <Select
-            value={currentGen}
-            onValueChange={(value) => {
-              setCurrentGen(value as keyof typeof POKEMON_GENERATIONS)
-              setPage(1)
-            }}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.keys(POKEMON_GENERATIONS).map((gen) => (
-                <SelectItem key={gen} value={gen}>
-                  {gen}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        <ViewSwitcher currentView={viewMode} onViewChange={setViewMode} />
-
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search Pokemon..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 w-full"
-          />
-          {searchQuery && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-              {filteredPokemon.length} found
-            </div>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Controls Row - Stacked on mobile, row on desktop */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+        <div className="flex flex-row gap-3 sm:gap-4 order-last sm:order-first">
+          {!initialPokemon && (
+            <Select
+              value={currentGen}
+              onValueChange={(value) => {
+                setCurrentGen(value as keyof typeof POKEMON_GENERATIONS)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-[140px] sm:w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.keys(POKEMON_GENERATIONS).map((gen) => (
+                  <SelectItem key={gen} value={gen}>
+                    {gen}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
+
+          <ViewSwitcher currentView={viewMode} onViewChange={setViewMode} />
+        </div>
+
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search Pokemon..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 w-full"
+            />
+            {searchQuery && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                {filteredPokemon.length} found
+              </div>
+            )}
+          </div>
         </div>
 
         {viewMode !== "kanban" && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-center sm:justify-start">
             <Button
               variant="outline"
               size="icon"
@@ -179,10 +201,9 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             
-            <div className="flex items-center gap-1 min-w-[100px] justify-center">
-              <span className="text-sm">
-                Page {page} of {totalPages || 1}
-              </span>
+            <div className="flex items-center gap-1 min-w-[100px] justify-center text-sm">
+              <span className="hidden sm:inline">Page </span>
+              {page} <span className="hidden sm:inline">of</span> {totalPages || 1}
             </div>
 
             <Button
@@ -197,9 +218,9 @@ export function PokemonGrid({ initialPokemon }: PokemonGridProps) {
         )}
       </div>
 
-      {/* Wrap the content in ScrollArea */}
-      <ScrollArea className="h-[calc(100vh-24rem)] rounded-lg border bg-card">
-        <div className="p-4">
+      {/* Wrap the content in ScrollArea with responsive height */}
+      <ScrollArea className="h-[calc(100vh-20rem)] sm:h-[calc(100vh-24rem)] rounded-lg border bg-card">
+        <div className="p-3 sm:p-4">
           {isLoading ? (
             <div className="flex justify-center items-center min-h-[200px]">
               <div className="animate-pulse text-muted-foreground">
