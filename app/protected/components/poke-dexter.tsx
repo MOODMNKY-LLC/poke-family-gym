@@ -54,6 +54,19 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import AvatarCircles from '@/components/ui/avatar-circles'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { FlowiseClient } from 'flowise-sdk'
+
+// Define the structure of streaming events
+interface StreamEvent {
+  event: 'start' | 'token' | 'sourceDocuments' | 'error' | 'end'
+  data?: string | Array<{
+    pageContent: string
+    metadata: Record<string, any>
+  }> | {
+    message: string
+  }
+}
 
 interface FileUpload {
   data: string
@@ -70,7 +83,15 @@ interface Message {
   image?: string
   error?: boolean
   uploads?: FileUpload[]
-  sourceDocuments?: any[]
+  sourceDocuments?: Array<{
+    pageContent: string
+    metadata: Record<string, any>
+  }>
+}
+
+interface FlowiseMessage {
+  message: string
+  type: 'userMessage' | 'apiMessage'
 }
 
 interface MessageBubbleProps {
@@ -602,6 +623,29 @@ export function PokeDexter() {
   const [socketId, setSocketId] = useState<string | null>(null)
   const socketRef = useRef<any>(null)
   const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const flowiseClient = useRef<FlowiseClient | null>(null)
+
+  // Initialize FlowiseClient
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_FLOWISE_API_URL) {
+      console.error('NEXT_PUBLIC_FLOWISE_API_URL is not configured')
+      return
+    }
+
+    // Remove trailing /api/v1 if present as the SDK adds it automatically
+    const baseUrl = process.env.NEXT_PUBLIC_FLOWISE_API_URL.replace(/\/api\/v1\/?$/, '')
+    
+    flowiseClient.current = new FlowiseClient({
+      baseUrl,
+      apiKey: process.env.NEXT_PUBLIC_FLOWISE_API_KEY
+    })
+
+    console.debug('Initialized Flowise client with:', { 
+      baseUrl,
+      hasApiKey: !!process.env.NEXT_PUBLIC_FLOWISE_API_KEY
+    })
+  }, [])
 
   // Add initial welcome message when no member is selected
   useEffect(() => {
@@ -625,86 +669,6 @@ export function PokeDexter() {
       }])
     }
   }, [selectedMember, currentChatflowId, chatflows])
-
-  // Update the socket connection setup with proper types
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_FLOWISE_API_URL) {
-      console.error('NEXT_PUBLIC_FLOWISE_API_URL is not configured')
-      return
-    }
-
-    let reconnectAttempts = 0
-    const maxReconnectAttempts = 5
-    const reconnectDelay = 2000 // 2 seconds
-
-    function setupSocket() {
-      try {
-        console.debug('Initializing socket connection...')
-        
-        // Initialize socket connection with retry options
-        const socket = socketIOClient(process.env.NEXT_PUBLIC_FLOWISE_API_URL || '', {
-          transports: ['websocket', 'polling'],
-          path: '/socket.io',
-          reconnection: true,
-          reconnectionAttempts: maxReconnectAttempts,
-          reconnectionDelay: reconnectDelay
-        })
-        socketRef.current = socket
-
-        socket.on('connect', () => {
-          console.debug('Socket connected:', socket.id)
-          setSocketId(socket.id)
-          reconnectAttempts = 0 // Reset attempts on successful connection
-        })
-
-        socket.on('connect_error', (error: Error) => {
-          console.warn('Socket connection error:', error)
-          reconnectAttempts++
-          if (reconnectAttempts >= maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached')
-            setError('Failed to establish chat connection after multiple attempts')
-          }
-        })
-
-        socket.on('error', (error: Error) => {
-          console.error('Socket error:', error)
-          setError(`Socket error: ${error?.message || 'Unknown error'}`)
-        })
-
-        socket.on('disconnect', (reason: string) => {
-          console.debug('Socket disconnected:', reason)
-          setSocketId(null)
-          
-          // Attempt manual reconnection for certain disconnect reasons
-          if (reason === 'transport close' || reason === 'ping timeout') {
-            setTimeout(() => {
-              if (reconnectAttempts < maxReconnectAttempts) {
-                console.debug('Attempting to reconnect...')
-                socket.connect()
-              }
-            }, reconnectDelay)
-          }
-        })
-
-        return socket
-      } catch (error) {
-        console.error('Socket initialization error:', error)
-        setError('Failed to initialize chat connection')
-        return null
-      }
-    }
-
-    const socket = setupSocket()
-
-    // Cleanup on unmount
-    return () => {
-      if (socket) {
-        console.debug('Cleaning up socket connection')
-        socket.removeAllListeners()
-        socket.disconnect()
-      }
-    }
-  }, [])
 
   // Update the chatflow switching effect
   useEffect(() => {
@@ -1027,192 +991,160 @@ export function PokeDexter() {
 
   // Update handleSendMessage function
   async function handleSendMessage(e?: React.FormEvent, voiceMessage?: Message) {
-    e?.preventDefault()
-    const content = inputMessage.trim()
-    
-    // Don't proceed if there's no content and no files/voice message
-    if (!content && !voiceMessage && selectedFiles.length === 0) return
-
-    setError(null)
-    setInputMessage('')
-    let streamedMessage = ''
-    let sourceDocuments: any[] = []
-
-    // Find the preview message if it exists
-    const lastMessage = messages[messages.length - 1]
-    const isPreview = lastMessage?.role === 'user' && lastMessage?.uploads
-
-    let userMessage: Message
-    if (isPreview) {
-      // Update the preview message with the content
-      userMessage = {
-        ...lastMessage,
-        content: content || 'Uploaded image' // Use content or default text
-      }
-      // Update the message in the state
-      setMessages(prev => prev.map(msg => 
-        msg.id === lastMessage.id 
-          ? userMessage
-          : msg
-      ))
-    } else {
-      // Create a new message
-      userMessage = voiceMessage || {
-        id: uuidv4(),
-        content: content || 'Uploaded image', // Use content or default text
-        role: 'user',
-        createdAt: new Date().toISOString(),
-        uploads: lastMessage?.uploads
-      }
-      setMessages(prev => [...prev, userMessage])
-    }
-
-    setIsLoading(true)
+    if (e) e.preventDefault()
+    if (isStreaming) return
 
     try {
-      // Use the current chatflow ID or fall back to default
-      const chatflowId = currentChatflowId || getDefaultChatflowId(chatflows)
-      console.debug('Using chatflow for message:', {
-        chatflowId,
-        memberName: selectedMember?.display_name,
-        memberId: selectedMember?.id
-      })
+      setIsStreaming(true)
+      setError(null)
 
-      if (!chatflowId) {
-        throw new Error('No chatflow available')
+      const userMessage = voiceMessage || {
+        id: uuidv4(),
+        content: inputMessage,
+        role: 'user',
+        createdAt: new Date().toISOString()
       }
 
-      // Enhanced request body with uploads
-      const requestBody = {
-        question: userMessage.content,
-        history: messages.map(msg => ({
-          role: msg.role === 'user' ? 'userMessage' : 'apiMessage',
-          content: msg.content
-        })),
-        overrideConfig: {
-          sessionId: chatId,
-          returnSourceDocuments: true,
-          socketIOClientId: socketId,
-          memoryType: 'zep',
-          memoryWindow: 5,
-          analytics: {
-            langFuse: {
-              userId: selectedMember?.id,
-              sessionId: chatId,
-              custom: {
-                memberName: selectedMember?.display_name,
-                memberRole: selectedMember?.role_id
+      // Add user message to chat
+      setMessages(prev => [...prev, userMessage as Message])
+      setInputMessage('')
+
+      if (!flowiseClient.current || !currentChatflowId) {
+        throw new Error('Chat is not properly initialized')
+      }
+
+      const messageId = uuidv4()
+      let streamedMessage = ''
+
+      // Format history for Flowise
+      const chatHistory: FlowiseMessage[] = messages.map(msg => ({
+        message: msg.content,
+        type: msg.role === 'user' ? 'userMessage' : 'apiMessage'
+      }))
+
+      try {
+        // Create streaming prediction
+        const sessionId = selectedMember?.family_id || chatId || 'default'
+        console.debug('Submitting message with config:', { 
+          chatflowId: selectedMember?.chatflow_id || currentChatflowId,
+          sessionId,
+          memberId: selectedMember?.id,
+          memberName: selectedMember?.display_name,
+          question: userMessage.content
+        })
+
+        const response = await flowiseClient.current.createPrediction({
+          chatflowId: selectedMember?.chatflow_id || currentChatflowId,
+          question: userMessage.content,
+          history: chatHistory,
+          overrideConfig: {
+            sessionId: selectedMember?.family_id || chatId,
+            returnSourceDocuments: true,
+            memoryType: 'zep',
+            memoryWindow: 5,
+            analytics: {
+              langFuse: {
+                userId: selectedMember?.id || 'anonymous',
+                sessionId: selectedMember?.family_id || chatId,
+                custom: {
+                  memberName: selectedMember?.display_name || 'anonymous',
+                  memberRole: selectedMember?.role_id || 'unknown'
+                }
+              }
+            }
+          },
+          streaming: true
+        })
+
+        // Handle streaming response
+        if (response && typeof response[Symbol.asyncIterator] === 'function') {
+          let hasStarted = false
+
+          for await (const chunk of response) {
+            if (typeof chunk === 'object' && chunk !== null) {
+              switch (chunk.event) {
+                case 'start':
+                  console.debug('Stream started')
+                  if (!hasStarted) {
+                    hasStarted = true
+                    setIsLoading(false)
+                    // Add empty assistant message that will be updated with streamed content
+                    setMessages(prev => [...prev, {
+                      id: messageId,
+                      content: '',
+                      role: 'assistant',
+                      createdAt: new Date().toISOString()
+                    }])
+                  }
+                  break
+                
+                case 'token':
+                  if (typeof chunk.data === 'string') {
+                    streamedMessage += chunk.data
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === messageId 
+                        ? { ...msg, content: streamedMessage }
+                        : msg
+                    ))
+                  }
+                  break
+                
+                case 'sourceDocuments':
+                  console.debug('Source documents:', chunk.data)
+                  if (Array.isArray(chunk.data) && chunk.data.every(doc => 
+                    typeof doc === 'object' && 
+                    'pageContent' in doc && 
+                    'metadata' in doc
+                  )) {
+                    const typedDocs = chunk.data as Array<{
+                      pageContent: string
+                      metadata: Record<string, any>
+                    }>
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === messageId 
+                        ? { ...msg, sourceDocuments: typedDocs }
+                        : msg
+                    ))
+                  }
+                  break
+                
+                case 'error':
+                  console.error('Stream error:', chunk.data)
+                  if (chunk.data && typeof chunk.data === 'object' && 'message' in chunk.data) {
+                    setError(`Stream error: ${(chunk.data as { message: string }).message || 'Unknown error'}`)
+                  } else {
+                    setError('An unknown streaming error occurred')
+                  }
+                  break
+                
+                case 'end':
+                  console.debug('Stream ended')
+                  if (streamedMessage && autoPlayTTS && isTTSEnabled) {
+                    try {
+                      await speakText(streamedMessage)
+                    } catch (error) {
+                      console.error('Auto-playback error:', error)
+                    }
+                  }
+                  break
               }
             }
           }
-        },
-        uploads: userMessage.uploads
-      }
-
-      // Set up enhanced socket listeners
-      if (socketRef.current && socketId) {
-        const messageId = uuidv4()
-
-        socketRef.current.removeAllListeners()
-
-        socketRef.current.on('start', () => {
-          console.debug('Stream started')
-          streamedMessage = ''
-          setMessages(prev => [...prev, {
-            id: messageId,
-            content: '',
-            role: 'assistant',
-            createdAt: new Date().toISOString()
-          }])
-        })
-
-        socketRef.current.on('token', (token: string) => {
-          streamedMessage += token
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId 
-              ? { ...msg, content: streamedMessage }
-              : msg
-          ))
-        })
-
-        socketRef.current.on('sourceDocuments', (docs: any) => {
-          console.debug('Source documents:', docs)
-          sourceDocuments = docs
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId 
-              ? { ...msg, sourceDocuments: docs }
-              : msg
-          ))
-        })
-
-        socketRef.current.on('error', (error: any) => {
-          console.error('Stream error:', error)
-          setError(`Stream error: ${error?.message || 'Unknown error'}`)
-        })
-
-        socketRef.current.on('end', async () => {
-          console.debug('Stream ended')
-          if (streamedMessage && autoPlayTTS && isTTSEnabled) {
-            try {
-              await speakText(streamedMessage)
-            } catch (error) {
-              console.error('Auto-playback error:', error)
-            }
-          }
-          setIsLoading(false)
-        })
-      }
-
-      // Make API request
-      const response = await fetch(`${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/prediction/${chatflowId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(process.env.NEXT_PUBLIC_FLOWISE_API_KEY && {
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
-          })
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Chat request failed: ${response.status} ${response.statusText} - ${errorText}`)
-      }
-
-      // Handle non-streaming response
-      if (!socketRef.current || !socketId) {
-        const data = await response.json()
-        const assistantMessage: Message = {
-          id: uuidv4(),
-          content: data.text || data.answer || 'No response received',
-          role: 'assistant',
-          createdAt: new Date().toISOString(),
-          sourceDocuments: data.sourceDocuments
+        } else {
+          throw new Error('Response is not a valid async iterable')
         }
-        setMessages(prev => [...prev, assistantMessage])
-        
-        if (autoPlayTTS && isTTSEnabled) {
-          await speakText(assistantMessage.content)
-        }
+      } catch (streamError) {
+        console.error('Streaming error:', streamError)
+        setError(`Streaming error: ${streamError instanceof Error ? streamError.message : 'Unknown error'}`)
+        setIsLoading(false)
       }
     } catch (error) {
-      console.error('Chat error:', error)
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-      setError(errorMessage)
-      setMessages(prev => [...prev, {
-        id: uuidv4(),
-        content: `Error: ${errorMessage}`,
-        role: 'assistant',
-        createdAt: new Date().toISOString(),
-        error: true
-      }])
-    } finally {
+      console.error('Message error:', error)
+      setError(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
       setIsLoading(false)
-      setSelectedFiles([])
-      if (imageInputRef.current) {
-        imageInputRef.current.value = ''
-      }
+    } finally {
+      setIsStreaming(false)
+      setIsLoading(false)
     }
   }
 

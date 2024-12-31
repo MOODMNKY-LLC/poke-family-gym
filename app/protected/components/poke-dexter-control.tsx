@@ -272,7 +272,15 @@ const chatflowBuilderSchema = z.object({
   
   // AI Configuration
   systemMessage: z.string().min(1, 'System message is required'),
-  modelName: z.enum(['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo']).default('gpt-4'),
+  modelName: z.enum([
+    'gpt-4o-mini',           // Default model
+    'gpt-4o',                // Standard GPT-4o
+    'gpt-4-turbo-2024-04-09', // GPT-4 Turbo
+    'gpt-4-turbo-preview',    // Preview version
+    'gpt-4',                  // Base GPT-4
+    'gpt-3.5-turbo-0125',     // Latest GPT-3.5
+    'gpt-3.5-turbo'          // Auto-updating GPT-3.5
+  ]).default('gpt-4o-mini'),
   temperature: z.number().min(0).max(2).default(0.4),
   maxTokens: z.number().min(1).max(4000).default(2000),
   topP: z.number().min(0).max(1).default(0.95),
@@ -1769,22 +1777,46 @@ export function PokeDexterControl() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="gpt-4">
+                              <SelectItem value="gpt-4o-mini">
                                 <div className="flex items-center gap-2">
                                   <Sparkles className="w-4 h-4 text-primary" />
-                                  GPT-4
+                                  GPT-4o Mini (Latest)
                                 </div>
                               </SelectItem>
-                              <SelectItem value="gpt-4-turbo">
+                              <SelectItem value="gpt-4o">
+                                <div className="flex items-center gap-2">
+                                  <Sparkles className="w-4 h-4 text-primary" />
+                                  GPT-4o (Standard)
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-4-turbo-2024-04-09">
                                 <div className="flex items-center gap-2">
                                   <Network className="w-4 h-4 text-primary" />
-                                  GPT-4 Turbo
+                                  GPT-4 Turbo (April 2024)
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-4-turbo-preview">
+                                <div className="flex items-center gap-2">
+                                  <Network className="w-4 h-4 text-primary" />
+                                  GPT-4 Turbo (Preview)
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-4">
+                                <div className="flex items-center gap-2">
+                                  <Network className="w-4 h-4 text-primary" />
+                                  GPT-4 (Standard)
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-3.5-turbo-0125">
+                                <div className="flex items-center gap-2">
+                                  <Bot className="w-4 h-4 text-primary" />
+                                  GPT-3.5 Turbo (Jan 2024)
                                 </div>
                               </SelectItem>
                               <SelectItem value="gpt-3.5-turbo">
                                 <div className="flex items-center gap-2">
                                   <Bot className="w-4 h-4 text-primary" />
-                                  GPT-3.5 Turbo
+                                  GPT-3.5 Turbo (Auto-updating)
                                 </div>
                               </SelectItem>
                             </SelectContent>

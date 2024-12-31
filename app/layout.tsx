@@ -52,12 +52,29 @@ export default function RootLayout({
             <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16 fixed top-0 left-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
               <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
                 <div className="hidden md:flex gap-5 items-center font-semibold">
-                  <Link href={"/"}>The Family Poké Gym</Link>
+                  <Link 
+                    href={"/"} 
+                    className="text-sm font-medium transition-colors hover:text-primary"
+                  >
+                    The Family Poké Gym
+                  </Link>
                   <Link 
                     href={"/pokedex"} 
                     className="text-sm font-medium transition-colors hover:text-primary"
                   >
                     Pokédex
+                  </Link>
+                  <Link 
+                    href={"/trainers"} 
+                    className="text-sm font-medium transition-colors hover:text-primary"
+                  >
+                    Trainers
+                  </Link>
+                  <Link 
+                    href={"/guide"} 
+                    className="text-sm font-medium transition-colors hover:text-primary"
+                  >
+                    Guide
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
