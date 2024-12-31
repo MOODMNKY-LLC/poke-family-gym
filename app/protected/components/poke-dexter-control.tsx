@@ -15,13 +15,26 @@ import { toast } from 'sonner'
 import type { ChatFlow } from '@/lib/flowise/types'
 import {
   Bot,
+  Copy,
+  Edit,
+  Trash,
+  Globe,
+  Lock,
+  Check,
+  X as XIcon,
+  Loader2,
+  LayoutGrid,
+  Table as TableIcon,
+  Columns,
+  Mic,
+  MessagesSquare,
+  CheckCircle2,
+  XCircle,
+  MicOff,
   Settings,
-  MessageSquare,
   BarChart2,
   Users,
   Database,
-  Loader2,
-  Copy,
   Wand2,
   Sparkles,
   Braces,
@@ -167,6 +180,121 @@ const processingConfigSchema = z.object({
 })
 
 type ProcessingConfigFormValues = z.infer<typeof processingConfigSchema>
+
+// Add new schema for flow data configuration
+const flowDataSchema = z.object({
+  nodes: z.array(z.object({
+    id: z.string(),
+    position: z.object({
+      x: z.number(),
+      y: z.number()
+    }),
+    type: z.string(),
+    data: z.object({
+      id: z.string(),
+      label: z.string(),
+      name: z.string(),
+      type: z.string(),
+      baseClasses: z.array(z.string()),
+      category: z.string(),
+      description: z.string(),
+      inputParams: z.array(z.any()),
+      inputAnchors: z.array(z.any()),
+      inputs: z.record(z.any()),
+      outputAnchors: z.array(z.any()),
+      outputs: z.record(z.any())
+    }),
+    width: z.number(),
+    height: z.number(),
+    selected: z.boolean(),
+    dragging: z.boolean().optional(),
+    positionAbsolute: z.object({
+      x: z.number(),
+      y: z.number()
+    }).optional()
+  })),
+  edges: z.array(z.object({
+    source: z.string(),
+    sourceHandle: z.string(),
+    target: z.string(),
+    targetHandle: z.string(),
+    type: z.string(),
+    id: z.string()
+  }))
+})
+
+type FlowDataFormValues = z.infer<typeof flowDataSchema>
+
+// Add new schema for basic chatflow configuration
+const basicChatflowSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  systemMessage: z.string().min(1, 'System message is required')
+})
+
+type BasicChatflowFormValues = z.infer<typeof basicChatflowSchema>
+
+// Add new schema for node configuration
+const nodeConfigSchema = z.object({
+  config: z.object({
+    type: z.string().default('chat'),
+    isPublic: z.boolean().default(false),
+    deployed: z.boolean().default(true),
+    category: z.string().nullable(),
+    speechToText: z.boolean().default(false)
+  }),
+  chatOpenAI: z.object({
+    modelName: z.string(),
+    temperature: z.number().min(0).max(2),
+    streaming: z.boolean(),
+    maxTokens: z.number().optional(),
+    topP: z.number().optional(),
+    frequencyPenalty: z.number().optional(),
+    presencePenalty: z.number().optional()
+  }),
+  memory: z.object({
+    type: z.string(),
+    baseURL: z.string().default('https://poke-gym-zep.moodmnky.com'),
+    sessionId: z.string().optional(),
+    k: z.number().min(1).max(100),
+    aiPrefix: z.string().default('ai'),
+    humanPrefix: z.string().default('human')
+  })
+})
+
+type NodeConfigFormValues = z.infer<typeof nodeConfigSchema>
+
+// Simplified schema for chatflow builder
+const chatflowBuilderSchema = z.object({
+  // Basic Information
+  name: z.string().min(1, 'Name is required'),
+  category: z.string().nullable(),
+  type: z.enum(['chat', 'assistant', 'agent', 'custom']).default('chat'),
+  
+  // AI Configuration
+  systemMessage: z.string().min(1, 'System message is required'),
+  modelName: z.enum(['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo']).default('gpt-4'),
+  temperature: z.number().min(0).max(2).default(0.4),
+  maxTokens: z.number().min(1).max(4000).default(2000),
+  topP: z.number().min(0).max(1).default(0.95),
+  frequencyPenalty: z.number().min(0).max(2).default(0),
+  presencePenalty: z.number().min(0).max(2).default(0),
+  
+  // Memory Configuration
+  memoryType: z.enum(['zep', 'redis', 'mongo', 'none']).default('zep'),
+  memoryWindow: z.number().min(1).max(50).default(10),
+  memoryBaseUrl: z.string().default('https://poke-gym-zep.moodmnky.com'),
+  memorySessionId: z.string().optional(),
+  aiPrefix: z.string().default('ai'),
+  humanPrefix: z.string().default('human'),
+  
+  // Features
+  isPublic: z.boolean().default(false),
+  deployed: z.boolean().default(true),
+  speechToText: z.boolean().default(false),
+  streaming: z.boolean().default(true)
+})
+
+type ChatflowBuilderFormValues = z.infer<typeof chatflowBuilderSchema>
 
 export function PokeDexterControl() {
   const [activeTab, setActiveTab] = useState('chatflows')
@@ -332,6 +460,833 @@ export function PokeDexterControl() {
       } else {
         toast.error('Failed to update chatflow: Unknown error')
       }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Add form initialization and handlers
+  const basicForm = useForm<BasicChatflowFormValues>({
+    resolver: zodResolver(basicChatflowSchema),
+    defaultValues: {
+      name: '',
+      systemMessage: 'You are PokéDexter, an advanced AI assistant.'
+    }
+  })
+
+  const flowDataForm = useForm<NodeConfigFormValues>({
+    resolver: zodResolver(nodeConfigSchema),
+    defaultValues: {
+      config: {
+        type: 'chat',
+        isPublic: false,
+        deployed: true,
+        category: null,
+        speechToText: false
+      },
+      chatOpenAI: {
+        modelName: 'gpt-4',
+        temperature: 0.4,
+        streaming: true,
+        maxTokens: 2000,
+        topP: 0.95,
+        frequencyPenalty: 0,
+        presencePenalty: 0
+      },
+      memory: {
+        type: 'zep',
+        baseURL: 'https://poke-gym-zep.moodmnky.com',
+        k: 10,
+        aiPrefix: 'ai',
+        humanPrefix: 'human'
+      }
+    }
+  })
+
+  const onBasicSubmit = async (data: BasicChatflowFormValues) => {
+    setIsSubmitting(true)
+    try {
+      // Store basic config for later use with flow data
+      localStorage.setItem('chatflow_basic_config', JSON.stringify(data))
+      toast.success('Basic configuration saved')
+    } catch (error) {
+      console.error('Error saving basic config:', error)
+      toast.error('Failed to save basic configuration')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const onFlowDataSubmit = async (data: NodeConfigFormValues) => {
+    setIsSubmitting(true)
+    try {
+      // Get basic config
+      const basicConfig = JSON.parse(localStorage.getItem('chatflow_basic_config') || '{}')
+      
+      // Transform form data into the required flow structure
+      const flowData = {
+        nodes: [
+          {
+            id: 'toolAgent_0',
+            position: { x: 1097, y: 413 },
+            type: 'customNode',
+            data: {
+              id: 'toolAgent_0',
+              label: 'Tool Agent',
+              version: 2,
+              name: 'toolAgent',
+              type: 'AgentExecutor',
+              baseClasses: ['AgentExecutor', 'BaseChain', 'Runnable'],
+              category: 'Agents',
+              description: 'Agent that uses Function Calling to pick the tools and args to call',
+              inputParams: [
+                {
+                  label: 'System Message',
+                  name: 'systemMessage',
+                  type: 'string',
+                  default: basicConfig.systemMessage
+                }
+              ],
+              inputs: {
+                tools: ['{{calculator_0.data.instance}}'],
+                memory: '{{ZepMemory_0.data.instance}}',
+                model: '{{chatOpenAI_0.data.instance}}',
+                systemMessage: basicConfig.systemMessage
+              }
+            },
+            width: 300,
+            height: 486
+          },
+          {
+            id: 'chatOpenAI_0',
+            position: { x: 327, y: 294 },
+            type: 'customNode',
+            data: {
+              id: 'chatOpenAI_0',
+              label: 'ChatOpenAI',
+              version: 8,
+              name: 'chatOpenAI',
+              type: 'ChatOpenAI',
+              baseClasses: ['ChatOpenAI', 'BaseChatModel', 'BaseLanguageModel', 'Runnable'],
+              category: 'Chat Models',
+              description: 'Wrapper around OpenAI large language models that use the Chat endpoint',
+              inputs: {
+                modelName: data.chatOpenAI.modelName,
+                temperature: data.chatOpenAI.temperature,
+                streaming: data.chatOpenAI.streaming,
+                maxTokens: data.chatOpenAI.maxTokens,
+                topP: data.chatOpenAI.topP,
+                frequencyPenalty: data.chatOpenAI.frequencyPenalty,
+                presencePenalty: data.chatOpenAI.presencePenalty
+              }
+            },
+            width: 300,
+            height: 670
+          },
+          {
+            id: 'ZepMemory_0',
+            position: { x: 671, y: 317 },
+            type: 'customNode',
+            data: {
+              id: 'ZepMemory_0',
+              label: 'Zep Memory',
+              version: 2,
+              name: 'ZepMemory',
+              type: 'ZepMemory',
+              baseClasses: ['ZepMemory', 'BaseChatMemory', 'BaseMemory'],
+              category: 'Memory',
+              description: 'Summarizes the conversation and stores the memory in zep server',
+              inputs: {
+                baseURL: data.memory.baseURL,
+                sessionId: data.memory.sessionId || '',
+                k: data.memory.k,
+                aiPrefix: data.memory.aiPrefix,
+                humanPrefix: data.memory.humanPrefix,
+                memoryKey: 'chat_history',
+                inputKey: 'input',
+                outputKey: 'text'
+              }
+            },
+            width: 300,
+            height: 427
+          }
+        ],
+        edges: [
+          {
+            source: 'chatOpenAI_0',
+            sourceHandle: 'chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable',
+            target: 'toolAgent_0',
+            targetHandle: 'toolAgent_0-input-model-BaseChatModel',
+            type: 'buttonedge',
+            id: 'chatOpenAI_0-chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable-toolAgent_0-toolAgent_0-input-model-BaseChatModel'
+          },
+          {
+            source: 'ZepMemory_0',
+            sourceHandle: 'ZepMemory_0-output-ZepMemory-ZepMemory|BaseChatMemory|BaseMemory',
+            target: 'toolAgent_0',
+            targetHandle: 'toolAgent_0-input-memory-BaseChatMemory',
+            type: 'buttonedge',
+            id: 'ZepMemory_0-ZepMemory_0-output-ZepMemory-ZepMemory|BaseChatMemory|BaseMemory-toolAgent_0-toolAgent_0-input-memory-BaseChatMemory'
+          }
+        ]
+      }
+
+      // Update the chatflowData creation in onFlowDataSubmit
+      const { speechToText, ...restConfig } = data.config
+      const chatflowData = {
+        name: basicConfig.name,
+        ...restConfig,
+        speechToText: speechToText ? 'true' : 'false',
+        flowData: JSON.stringify(flowData)
+      }
+
+      const response = await FlowiseAPI.createChatflow(chatflowData)
+      
+      // Clear stored basic config
+      localStorage.removeItem('chatflow_basic_config')
+      
+      toast.success('Chatflow created successfully')
+      console.debug('Created chatflow:', response)
+    } catch (error) {
+      console.error('Error creating chatflow:', error)
+      toast.error('Failed to create chatflow')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const loadTemplate = () => {
+    try {
+      // Load PokéDexter template
+      const template = require('@/instructions/_PokeDexter Chatflow.json')
+      flowDataForm.reset(template)
+      toast.success('Template loaded successfully')
+    } catch (error) {
+      console.error('Error loading template:', error)
+      toast.error('Failed to load template')
+    }
+  }
+
+  const validateFlow = async () => {
+    try {
+      const data = flowDataForm.getValues()
+      const response = await FlowiseAPI.validateChatflow({
+        flowData: JSON.stringify(data)
+      })
+      toast.success('Flow configuration is valid')
+      console.debug('Validation response:', response)
+    } catch (error) {
+      console.error('Error validating flow:', error)
+      toast.error('Flow configuration is invalid')
+    }
+  }
+
+  // Add form initialization with all fields
+  const builderForm = useForm<ChatflowBuilderFormValues>({
+    resolver: zodResolver(chatflowBuilderSchema),
+    defaultValues: {
+      name: '',
+      category: null,
+      type: 'chat',
+      systemMessage: 'You are PokéDexter, an advanced AI assistant.',
+      modelName: 'gpt-4',
+      temperature: 0.4,
+      maxTokens: 2000,
+      topP: 0.95,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      memoryType: 'zep',
+      memoryWindow: 10,
+      memoryBaseUrl: 'https://poke-gym-zep.moodmnky.com',
+      memorySessionId: '',
+      aiPrefix: 'ai',
+      humanPrefix: 'human',
+      isPublic: false,
+      deployed: true,
+      speechToText: false,
+      streaming: true
+    }
+  })
+
+  // Add form submission handler
+  const onBuilderSubmit = async (data: ChatflowBuilderFormValues) => {
+    console.log('Form submission started')
+    console.log('Form data:', data)
+    
+    setIsSubmitting(true)
+    try {
+      const flowData = {
+        nodes: [
+          {
+            id: "toolAgent_0",
+            position: {
+              x: 1097.4208657424156,
+              y: 413.78962915804334
+            },
+            type: "customNode",
+            data: {
+              id: "toolAgent_0",
+              label: "Tool Agent",
+              version: 2,
+              name: "toolAgent",
+              type: "AgentExecutor",
+              baseClasses: [
+                "AgentExecutor",
+                "BaseChain",
+                "Runnable"
+              ],
+              category: "Agents",
+              description: "Agent that uses Function Calling to pick the tools and args to call",
+              inputParams: [
+                {
+                  label: "System Message",
+                  name: "systemMessage",
+                  type: "string",
+                  default: "You are a helpful AI assistant.",
+                  description: "If Chat Prompt Template is provided, this will be ignored",
+                  rows: 4,
+                  optional: true,
+                  additionalParams: true,
+                  id: "toolAgent_0-input-systemMessage-string"
+                },
+                {
+                  label: "Max Iterations",
+                  name: "maxIterations",
+                  type: "number",
+                  optional: true,
+                  additionalParams: true,
+                  id: "toolAgent_0-input-maxIterations-number"
+                }
+              ],
+              inputAnchors: [
+                {
+                  label: "Tools",
+                  name: "tools",
+                  type: "Tool",
+                  list: true,
+                  id: "toolAgent_0-input-tools-Tool"
+                },
+                {
+                  label: "Memory",
+                  name: "memory",
+                  type: "BaseChatMemory",
+                  id: "toolAgent_0-input-memory-BaseChatMemory"
+                },
+                {
+                  label: "Tool Calling Chat Model",
+                  name: "model",
+                  type: "BaseChatModel",
+                  description: "Only compatible with models that are capable of function calling: ChatOpenAI, ChatMistral, ChatAnthropic, ChatGoogleGenerativeAI, ChatVertexAI, GroqChat",
+                  id: "toolAgent_0-input-model-BaseChatModel"
+                },
+                {
+                  label: "Chat Prompt Template",
+                  name: "chatPromptTemplate",
+                  type: "ChatPromptTemplate",
+                  description: "Override existing prompt with Chat Prompt Template. Human Message must includes {input} variable",
+                  optional: true,
+                  id: "toolAgent_0-input-chatPromptTemplate-ChatPromptTemplate"
+                },
+                {
+                  label: "Input Moderation",
+                  description: "Detect text that could generate harmful output and prevent it from being sent to the language model",
+                  name: "inputModeration",
+                  type: "Moderation",
+                  optional: true,
+                  list: true,
+                  id: "toolAgent_0-input-inputModeration-Moderation"
+                }
+              ],
+              inputs: {
+                tools: [
+                  "{{calculator_0.data.instance}}"
+                ],
+                memory: "{{ZepMemory_0.data.instance}}",
+                model: "{{chatOpenAI_0.data.instance}}",
+                chatPromptTemplate: "",
+                systemMessage: data.systemMessage,
+                inputModeration: "",
+                maxIterations: ""
+              },
+              outputAnchors: [
+                {
+                  id: "toolAgent_0-output-toolAgent-AgentExecutor|BaseChain|Runnable",
+                  name: "toolAgent",
+                  label: "AgentExecutor",
+                  description: "Agent that uses Function Calling to pick the tools and args to call",
+                  type: "AgentExecutor | BaseChain | Runnable"
+                }
+              ],
+              outputs: {},
+              selected: false
+            },
+            width: 300,
+            height: 486,
+            selected: false,
+            dragging: false,
+            positionAbsolute: {
+              x: 1097.4208657424156,
+              y: 413.78962915804334
+            }
+          },
+          {
+            id: "chatOpenAI_0",
+            position: {
+              x: 327.8478876074853,
+              y: 294.4489773347999
+            },
+            type: "customNode",
+            data: {
+              id: "chatOpenAI_0",
+              label: "ChatOpenAI",
+              version: 8,
+              name: "chatOpenAI",
+              type: "ChatOpenAI",
+              baseClasses: [
+                "ChatOpenAI",
+                "BaseChatModel",
+                "BaseLanguageModel",
+                "Runnable"
+              ],
+              category: "Chat Models",
+              description: "Wrapper around OpenAI large language models that use the Chat endpoint",
+              inputParams: [
+                {
+                  label: "Connect Credential",
+                  name: "credential",
+                  type: "credential",
+                  credentialNames: [
+                    "openAIApi"
+                  ],
+                  id: "chatOpenAI_0-input-credential-credential"
+                },
+                {
+                  label: "Model Name",
+                  name: "modelName",
+                  type: "asyncOptions",
+                  loadMethod: "listModels",
+                  default: "gpt-4o-mini",
+                  id: "chatOpenAI_0-input-modelName-asyncOptions"
+                },
+                {
+                  label: "Temperature",
+                  name: "temperature",
+                  type: "number",
+                  step: 0.1,
+                  default: 0.9,
+                  optional: true,
+                  id: "chatOpenAI_0-input-temperature-number"
+                },
+                {
+                  label: "Streaming",
+                  name: "streaming",
+                  type: "boolean",
+                  default: true,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-streaming-boolean"
+                },
+                {
+                  label: "Max Tokens",
+                  name: "maxTokens",
+                  type: "number",
+                  step: 1,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-maxTokens-number"
+                },
+                {
+                  label: "Top Probability",
+                  name: "topP",
+                  type: "number",
+                  step: 0.1,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-topP-number"
+                },
+                {
+                  label: "Frequency Penalty",
+                  name: "frequencyPenalty",
+                  type: "number",
+                  step: 0.1,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-frequencyPenalty-number"
+                },
+                {
+                  label: "Presence Penalty",
+                  name: "presencePenalty",
+                  type: "number",
+                  step: 0.1,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-presencePenalty-number"
+                },
+                {
+                  label: "Timeout",
+                  name: "timeout",
+                  type: "number",
+                  step: 1,
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-timeout-number"
+                },
+                {
+                  label: "BasePath",
+                  name: "basepath",
+                  type: "string",
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-basepath-string"
+                },
+                {
+                  label: "Proxy Url",
+                  name: "proxyUrl",
+                  type: "string",
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-proxyUrl-string"
+                },
+                {
+                  label: "Stop Sequence",
+                  name: "stopSequence",
+                  type: "string",
+                  rows: 4,
+                  optional: true,
+                  description: "List of stop words to use when generating. Use comma to separate multiple stop words.",
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-stopSequence-string"
+                },
+                {
+                  label: "BaseOptions",
+                  name: "baseOptions",
+                  type: "json",
+                  optional: true,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-baseOptions-json"
+                },
+                {
+                  label: "Allow Image Uploads",
+                  name: "allowImageUploads",
+                  type: "boolean",
+                  description: "Allow image input. Refer to the <a href=\"https://docs.flowiseai.com/using-flowise/uploads#image\" target=\"_blank\">docs</a> for more details.",
+                  default: false,
+                  optional: true,
+                  id: "chatOpenAI_0-input-allowImageUploads-boolean"
+                },
+                {
+                  label: "Image Resolution",
+                  description: "This parameter controls the resolution in which the model views the image.",
+                  name: "imageResolution",
+                  type: "options",
+                  options: [
+                    {
+                      label: "Low",
+                      name: "low"
+                    },
+                    {
+                      label: "High",
+                      name: "high"
+                    },
+                    {
+                      label: "Auto",
+                      name: "auto"
+                    }
+                  ],
+                  default: "low",
+                  optional: false,
+                  additionalParams: true,
+                  id: "chatOpenAI_0-input-imageResolution-options"
+                }
+              ],
+              inputAnchors: [
+                {
+                  label: "Cache",
+                  name: "cache",
+                  type: "BaseCache",
+                  optional: true,
+                  id: "chatOpenAI_0-input-cache-BaseCache"
+                }
+              ],
+              inputs: {
+                cache: "",
+                modelName: "gpt-4o",
+                temperature: data.temperature,
+                streaming: data.streaming,
+                maxTokens: data.maxTokens,
+                topP: "",
+                frequencyPenalty: "",
+                presencePenalty: "",
+                timeout: "",
+                basepath: "",
+                proxyUrl: "",
+                stopSequence: "",
+                baseOptions: "",
+                allowImageUploads: true,
+                imageResolution: "low"
+              },
+              outputAnchors: [
+                {
+                  id: "chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable",
+                  name: "chatOpenAI",
+                  label: "ChatOpenAI",
+                  description: "Wrapper around OpenAI large language models that use the Chat endpoint",
+                  type: "ChatOpenAI | BaseChatModel | BaseLanguageModel | Runnable"
+                }
+              ],
+              outputs: {},
+              selected: false
+            },
+            width: 300,
+            height: 670,
+            selected: false,
+            positionAbsolute: {
+              x: 327.8478876074853,
+              y: 294.4489773347999
+            },
+            dragging: false
+          },
+          {
+            id: "ZepMemory_0",
+            position: {
+              x: 671.0987191520683,
+              y: 317.45687667552954
+            },
+            type: "customNode",
+            data: {
+              id: "ZepMemory_0",
+              label: "Zep Memory - Open Source",
+              version: 2,
+              name: "ZepMemory",
+              type: "ZepMemory",
+              baseClasses: [
+                "ZepMemory",
+                "BaseChatMemory",
+                "BaseMemory"
+              ],
+              category: "Memory",
+              description: "Summarizes the conversation and stores the memory in zep server",
+              inputParams: [
+                {
+                  label: "Connect Credential",
+                  name: "credential",
+                  type: "credential",
+                  optional: true,
+                  description: "Configure JWT authentication on your Zep instance (Optional)",
+                  credentialNames: [
+                    "zepMemoryApi"
+                  ],
+                  id: "ZepMemory_0-input-credential-credential"
+                },
+                {
+                  label: "Base URL",
+                  name: "baseURL",
+                  type: "string",
+                  default: "http://127.0.0.1:8000",
+                  id: "ZepMemory_0-input-baseURL-string"
+                },
+                {
+                  label: "Session Id",
+                  name: "sessionId",
+                  type: "string",
+                  description: "If not specified, a random id will be used. Learn <a target=\"_blank\" href=\"https://docs.flowiseai.com/memory/long-term-memory#ui-and-embedded-chat\">more</a>",
+                  default: "",
+                  additionalParams: true,
+                  optional: true,
+                  id: "ZepMemory_0-input-sessionId-string"
+                },
+                {
+                  label: "Size",
+                  name: "k",
+                  type: "number",
+                  default: "10",
+                  description: "Window of size k to surface the last k back-and-forth to use as memory.",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-k-number"
+                },
+                {
+                  label: "AI Prefix",
+                  name: "aiPrefix",
+                  type: "string",
+                  default: "ai",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-aiPrefix-string"
+                },
+                {
+                  label: "Human Prefix",
+                  name: "humanPrefix",
+                  type: "string",
+                  default: "human",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-humanPrefix-string"
+                },
+                {
+                  label: "Memory Key",
+                  name: "memoryKey",
+                  type: "string",
+                  default: "chat_history",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-memoryKey-string"
+                },
+                {
+                  label: "Input Key",
+                  name: "inputKey",
+                  type: "string",
+                  default: "input",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-inputKey-string"
+                },
+                {
+                  label: "Output Key",
+                  name: "outputKey",
+                  type: "string",
+                  default: "text",
+                  additionalParams: true,
+                  id: "ZepMemory_0-input-outputKey-string"
+                }
+              ],
+              inputAnchors: [],
+              inputs: {
+                baseURL: data.memoryBaseUrl,
+                sessionId: data.memorySessionId || '',
+                k: data.memoryWindow,
+                aiPrefix: data.aiPrefix,
+                humanPrefix: data.humanPrefix,
+                memoryKey: "chat_history",
+                inputKey: "input",
+                outputKey: "text"
+              },
+              outputAnchors: [
+                {
+                  id: "ZepMemory_0-output-ZepMemory-ZepMemory|BaseChatMemory|BaseMemory",
+                  name: "ZepMemory",
+                  label: "ZepMemory",
+                  description: "Summarizes the conversation and stores the memory in zep server",
+                  type: "ZepMemory | BaseChatMemory | BaseMemory"
+                }
+              ],
+              outputs: {},
+              selected: false
+            },
+            width: 300,
+            height: 427,
+            selected: false,
+            positionAbsolute: {
+              x: 671.0987191520683,
+              y: 317.45687667552954
+            },
+            dragging: false
+          },
+          {
+            id: "calculator_0",
+            position: {
+              x: 758.1537754816807,
+              y: 305.26916878938374
+            },
+            type: "customNode",
+            data: {
+              id: "calculator_0",
+              label: "Calculator",
+              version: 1,
+              name: "calculator",
+              type: "Calculator",
+              baseClasses: [
+                "Calculator",
+                "Tool",
+                "StructuredTool",
+                "Runnable"
+              ],
+              category: "Tools",
+              description: "Perform calculations on response",
+              inputParams: [],
+              inputAnchors: [],
+              inputs: {},
+              outputAnchors: [
+                {
+                  id: "calculator_0-output-calculator-Calculator|Tool|StructuredTool|Runnable",
+                  name: "calculator",
+                  label: "Calculator",
+                  description: "Perform calculations on response",
+                  type: "Calculator | Tool | StructuredTool | Runnable"
+                }
+              ],
+              outputs: {},
+              selected: false
+            },
+            width: 300,
+            height: 143,
+            positionAbsolute: {
+              x: 758.1537754816807,
+              y: 305.26916878938374
+            },
+            selected: false
+          }
+        ],
+        edges: [
+          {
+            source: "chatOpenAI_0",
+            sourceHandle: "chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable",
+            target: "toolAgent_0",
+            targetHandle: "toolAgent_0-input-model-BaseChatModel",
+            type: "buttonedge",
+            id: "chatOpenAI_0-chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable-toolAgent_0-toolAgent_0-input-model-BaseChatModel"
+          },
+          {
+            source: "ZepMemory_0",
+            sourceHandle: "ZepMemory_0-output-ZepMemory-ZepMemory|BaseChatMemory|BaseMemory",
+            target: "toolAgent_0",
+            targetHandle: "toolAgent_0-input-memory-BaseChatMemory",
+            type: "buttonedge",
+            id: "ZepMemory_0-ZepMemory_0-output-ZepMemory-ZepMemory|BaseChatMemory|BaseMemory-toolAgent_0-toolAgent_0-input-memory-BaseChatMemory"
+          },
+          {
+            source: "calculator_0",
+            sourceHandle: "calculator_0-output-calculator-Calculator|Tool|StructuredTool|Runnable",
+            target: "toolAgent_0",
+            targetHandle: "toolAgent_0-input-tools-Tool",
+            type: "buttonedge",
+            id: "calculator_0-calculator_0-output-calculator-Calculator|Tool|StructuredTool|Runnable-toolAgent_0-toolAgent_0-input-tools-Tool"
+          }
+        ]
+      }
+
+      const chatflowData = {
+        name: data.name,
+        type: "CHATFLOW",
+        isPublic: data.isPublic,
+        deployed: data.deployed,
+        category: "pokemon;assistant",
+        speechToText: "{}",
+        flowData: JSON.stringify(flowData),
+        chatbotConfig: "{}",
+        apiConfig: "{}",
+        analytic: "{}",
+        apikeyid: "apikey-pokedexter"
+      }
+
+      console.log('Submitting chatflow data:', chatflowData)
+
+      const response = await FlowiseAPI.createChatflow(chatflowData)
+      console.log('Create chatflow response:', response)
+
+      if (response?.id) {
+        builderForm.reset()
+        toast.success(`Chatflow "${response.name}" created successfully!`)
+        setActiveTab('chatflows')
+        
+        setTimeout(() => {
+          const event = new CustomEvent('chatflows:refresh', { 
+            detail: { id: response.id } 
+          })
+          window.dispatchEvent(event)
+        }, 500)
+      } else {
+        console.error('Invalid response - missing ID:', response)
+        throw new Error('Failed to create chatflow - no ID returned')
+      }
+    } catch (error) {
+      console.error('Error in form submission:', error)
+      toast.error('Failed to create chatflow: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setIsSubmitting(false)
     }
@@ -666,359 +1621,350 @@ export function PokeDexterControl() {
             <div>
               <h3 className="text-lg font-medium">Chatflow Builder</h3>
               <p className="text-sm text-muted-foreground">
-                Create and configure chatflow templates
+                Create a new chatflow with our streamlined builder
               </p>
             </div>
-            <Button className="gap-2">
-              <Sparkles className="w-4 h-4" />
-              New Template
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={loadTemplate}
+                className="gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Load Template
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={validateFlow}
+                className="gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Validate
+              </Button>
+            </div>
           </div>
 
-          <Form {...form}>
-            <form className="space-y-4">
-              <Tabs defaultValue="general" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
-                  <TabsTrigger value="general">
-                    <Bot className="w-4 h-4 mr-2" />
-                    General
-                  </TabsTrigger>
-                  <TabsTrigger value="model">
-                    <Cpu className="w-4 h-4 mr-2" />
-                    Model
-                  </TabsTrigger>
-                  <TabsTrigger value="memory">
-                    <HardDrive className="w-4 h-4 mr-2" />
-                    Memory
-                  </TabsTrigger>
-                  <TabsTrigger value="tools">
-                    <Wand2 className="w-4 h-4 mr-2" />
-                    Tools
-                  </TabsTrigger>
-                  <TabsTrigger value="advanced">
-                    <Settings className="w-4 h-4 mr-2" />
-                    Advanced
-                  </TabsTrigger>
-                </TabsList>
+          <Card className="p-6">
+            <Form {...builderForm}>
+              <form 
+                onSubmit={builderForm.handleSubmit((data) => {
+                  console.log('Form submitted with data:', data)
+                  onBuilderSubmit(data)
+                })} 
+                className="space-y-6"
+              >
+                <Tabs defaultValue="basic" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="basic" className="gap-2">
+                      <Bot className="w-4 h-4" />
+                      Basic
+                    </TabsTrigger>
+                    <TabsTrigger value="ai" className="gap-2">
+                      <Cpu className="w-4 h-4" />
+                      AI Model
+                    </TabsTrigger>
+                    <TabsTrigger value="memory" className="gap-2">
+                      <HardDrive className="w-4 h-4" />
+                      Memory
+                    </TabsTrigger>
+                    <TabsTrigger value="features" className="gap-2">
+                      <Settings className="w-4 h-4" />
+                      Features
+                    </TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="general" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
+                  <TabsContent value="basic" className="space-y-4 mt-4">
+                    <div className="grid gap-4 grid-cols-2">
+                      <FormField
+                        control={builderForm.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Name</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="e.g., PokéDexter Assistant" />
+                            </FormControl>
+                            <FormDescription>
+                              A descriptive name for this chatflow
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={builderForm.control}
+                        name="type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Type</FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a type" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="chat">Chat</SelectItem>
+                                <SelectItem value="assistant">Assistant</SelectItem>
+                                <SelectItem value="agent">Agent</SelectItem>
+                                <SelectItem value="custom">Custom</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              The type of chatflow determines its behavior
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
                     <FormField
-                      control={form.control}
-                      name="name"
+                      control={builderForm.control}
+                      name="systemMessage"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Name</FormLabel>
+                          <FormLabel>System Message</FormLabel>
                           <FormControl>
-                            <Input {...field} placeholder="e.g., PokéDexter Assistant" />
+                            <div className="relative">
+                              <Textarea
+                                {...field}
+                                className="min-h-[200px] resize-none pr-4
+                                  [&::-webkit-scrollbar]:w-1.5
+                                  [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10
+                                  hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20
+                                  [&::-webkit-scrollbar-track]:bg-transparent"
+                                placeholder="Enter the system message that defines the AI's behavior..."
+                              />
+                              <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
+                            </div>
                           </FormControl>
                           <FormDescription>
-                            A descriptive name for this chatflow
+                            The system message that defines the AI's behavior and capabilities
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="ai" className="space-y-4 mt-4">
+                    <FormField
+                      control={builderForm.control}
+                      name="modelName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Model</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a model" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="gpt-4">
+                                <div className="flex items-center gap-2">
+                                  <Sparkles className="w-4 h-4 text-primary" />
+                                  GPT-4
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-4-turbo">
+                                <div className="flex items-center gap-2">
+                                  <Network className="w-4 h-4 text-primary" />
+                                  GPT-4 Turbo
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="gpt-3.5-turbo">
+                                <div className="flex items-center gap-2">
+                                  <Bot className="w-4 h-4 text-primary" />
+                                  GPT-3.5 Turbo
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            The OpenAI model to use for chat completion
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
 
-                          <FormField
-                            control={form.control}
-                          name="type"
-                            render={({ field }) => (
-                            <FormItem>
-                          <FormLabel>Type</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={field.onChange}
-                          >
-                                <FormControl>
-                                  <SelectTrigger>
-                                <SelectValue placeholder="Select a type" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                              {CHATFLOW_TYPES.map(type => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
-                                </SelectItem>
-                              ))}
-                                </SelectContent>
-                              </Select>
-                                  <FormDescription>
-                            The type of chatflow determines its behavior and capabilities
-                                  </FormDescription>
-                              <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                      name="systemMessage"
-                            render={({ field }) => (
-                              <FormItem>
-                          <FormLabel>System Message</FormLabel>
-                                <FormControl>
-                            <div className="relative">
-                              <Textarea 
-                                {...field} 
-                                placeholder="Enter the system message for the AI"
-                                className="min-h-[200px] max-h-[200px] resize-none pr-4
-                                  [&::-webkit-scrollbar]:w-1.5
-                                  [&::-webkit-scrollbar-thumb]:bg-muted-foreground/10
-                                  hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20
-                                  [&::-webkit-scrollbar-track]:bg-transparent
-                                  transition-colors"
-                              />
-                              <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-lg" />
-                            </div>
-                                </FormControl>
-                                <FormDescription>
-                            The system message that defines the AI's behavior
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="model" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                          <FormField
-                            control={form.control}
-                      name="temperature"
-                            render={({ field }) => (
-                              <FormItem>
-                          <FormLabel>Temperature: {field.value}</FormLabel>
-                                <FormControl>
-                            <div className="flex items-center gap-4">
+                    <div className="grid gap-4 grid-cols-2">
+                      <FormField
+                        control={builderForm.control}
+                        name="temperature"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Temperature: {field.value}</FormLabel>
+                            <FormControl>
                               <Slider
                                 min={0}
                                 max={2}
                                 step={0.1}
-                                value={[Number(field.value)]}
-                                onValueChange={([value]) => field.onChange(Number(value))}
-                                className="flex-1"
+                                value={[field.value]}
+                                onValueChange={([value]) => field.onChange(value)}
                               />
-                                  <Input 
-                                    type="number" 
-                                {...field}
-                                value={Number(field.value)}
-                                onChange={e => field.onChange(Number(e.target.value))}
-                                className="w-20"
-                              />
-                            </div>
-                                </FormControl>
-                                <FormDescription>
-                            Controls randomness in responses (0 = deterministic, 2 = very random)
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                            </FormControl>
+                            <FormDescription>
+                              Controls randomness in responses
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                          <FormField
-                            control={form.control}
-                      name="maxTokens"
-                            render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Max Tokens</FormLabel>
-                                <FormControl>
-                            <div className="flex items-center gap-4">
-                              <Slider
-                                min={1}
-                                max={4000}
-                                step={1}
-                                value={[Number(field.value)]}
-                                onValueChange={([value]) => field.onChange(Number(value))}
-                                className="flex-1"
-                              />
+                      <FormField
+                        control={builderForm.control}
+                        name="maxTokens"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Max Tokens</FormLabel>
+                            <FormControl>
                               <Input
                                 type="number"
                                 {...field}
-                                value={Number(field.value)}
                                 onChange={e => field.onChange(Number(e.target.value))}
-                                className="w-20"
                               />
-                            </div>
-                                </FormControl>
-                          <FormDescription>
-                            Maximum number of tokens in the response (1-4000)
-                          </FormDescription>
-                          <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                  </div>
-                      </TabsContent>
+                            </FormControl>
+                            <FormDescription>
+                              Maximum tokens in response
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                      <TabsContent value="memory" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                          <FormField
-                            control={form.control}
-                          name="memoryType"
-                            render={({ field }) => (
-                              <FormItem>
-                              <FormLabel>Memory Type</FormLabel>
+                    <FormField
+                      control={builderForm.control}
+                      name="streaming"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-0.5">
+                            <FormLabel>Streaming Responses</FormLabel>
+                            <FormDescription>
+                              Enable token-by-token streaming
+                            </FormDescription>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="memory" className="space-y-4 mt-4">
+                    <FormField
+                      control={builderForm.control}
+                      name="memoryType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Memory Type</FormLabel>
                           <Select
                             value={field.value}
                             onValueChange={field.onChange}
                           >
-                                <FormControl>
-                                  <SelectTrigger>
+                            <FormControl>
+                              <SelectTrigger>
                                 <SelectValue placeholder="Select memory type" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                              {MEMORY_TYPES.map(type => (
-                                <SelectItem key={type.value} value={type.value}>
-                                  <div className="flex flex-col gap-1">
-                                    <span>{type.label}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {type.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                                </SelectContent>
-                              </Select>
-                                <FormDescription>
-                            Choose how the chatflow remembers conversation history
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                        {form.watch('memoryType') === 'zep' && (
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name="memoryWindow"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Memory Window Size</FormLabel>
-                              <FormControl>
-                                <div className="flex items-center gap-4">
-                                  <Slider
-                                    min={1}
-                                    max={50}
-                                    step={1}
-                                    value={[Number(field.value)]}
-                                    onValueChange={([value]) => field.onChange(Number(value))}
-                                    className="flex-1"
-                                  />
-                                  <Input
-                                    type="number"
-                                    {...field}
-                                    value={Number(field.value)}
-                                    onChange={e => field.onChange(Number(e.target.value))}
-                                    className="w-20"
-                                  />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="zep">
+                                <div className="flex items-center gap-2">
+                                  <HardDrive className="w-4 h-4 text-primary" />
+                                  Zep Memory
                                 </div>
-                              </FormControl>
-                              <FormDescription>
-                                Number of previous messages to include in context (1-50)
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                              </SelectItem>
+                              <SelectItem value="redis">
+                                <div className="flex items-center gap-2">
+                                  <Database className="w-4 h-4 text-primary" />
+                                  Redis Memory
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="mongo">
+                                <div className="flex items-center gap-2">
+                                  <Database className="w-4 h-4 text-primary" />
+                                  MongoDB Memory
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="none">
+                                <div className="flex items-center gap-2">
+                                  <XIcon className="w-4 h-4 text-muted-foreground" />
+                                  No Memory
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Choose how conversation history is stored
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                        <FormField
-                          control={form.control}
-                              name="memoryBaseUrl"
-                          render={({ field }) => (
-                            <FormItem>
-                                  <FormLabel>Memory Server URL</FormLabel>
-                                <FormControl>
-                                    <Input 
-                                  {...field}
-                                  placeholder="https://your-zep-server.com"
-                                    />
-                                </FormControl>
-                              <FormDescription>
-                                The URL of your Zep memory server
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="aiPrefix"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>AI Prefix</FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    {...field}
-                                    placeholder="ai"
-                                  />
-                                </FormControl>
-                                <FormDescription>
-                                  Prefix for AI messages in memory
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                        <FormField
-                          control={form.control}
-                            name="humanPrefix"
-                          render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Human Prefix</FormLabel>
-                              <FormControl>
-                                    <Input 
-                                    {...field}
-                                    placeholder="human"
-                                    />
-                              </FormControl>
-                              <FormDescription>
-                                  Prefix for human messages in memory
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        </div>
-                      </div>
-                        )}
-                  </div>
-                      </TabsContent>
-
-                <TabsContent value="tools" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                    <div className="border rounded-lg p-4">
-                      <h4 className="font-medium mb-2">Available Tools</h4>
-                      <div className="grid grid-cols-3 gap-4">
-                        {NODE_TYPES.map(node => (
-                          <Card key={node.value} className="p-4">
-                            <div className="space-y-2">
-                              <h5 className="font-medium">{node.label}</h5>
-                              <p className="text-sm text-muted-foreground">
-                                {node.description}
-                              </p>
-                              <Badge variant="secondary">
-                                {node.category}
-                          </Badge>
-                            </div>
-                          </Card>
-                        ))}
-                          </div>
-                            </div>
-                          </div>
-        </TabsContent>
-
-                <TabsContent value="advanced" className="space-y-4 mt-4">
-                  <div className="grid gap-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-4">
                       <FormField
-                        control={form.control}
+                        control={builderForm.control}
+                        name="memoryWindow"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Memory Window</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                {...field}
+                                onChange={e => field.onChange(Number(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Number of messages to remember
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={builderForm.control}
+                      name="memorySessionId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Session ID</FormLabel>
+                          <FormControl>
+                            <Input 
+                              {...field} 
+                              value={field.value || ''} 
+                              placeholder="e.g., family-123 or pokemon-trainer-red" 
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Add a custom identifier to group related conversations. Great for family groups or specific training sessions!
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="features" className="space-y-4 mt-4">
+                    <div className="grid gap-4 grid-cols-2">
+                      <FormField
+                        control={builderForm.control}
                         name="deployed"
                         render={({ field }) => (
                           <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
@@ -1029,9 +1975,9 @@ export function PokeDexterControl() {
                               />
                             </FormControl>
                             <div className="space-y-0.5">
-                              <FormLabel>Deployment Status</FormLabel>
+                              <FormLabel>Auto-Deploy</FormLabel>
                               <FormDescription>
-                                Enable or disable this chatflow
+                                Deploy immediately after creation
                               </FormDescription>
                             </div>
                           </FormItem>
@@ -1039,7 +1985,7 @@ export function PokeDexterControl() {
                       />
 
                       <FormField
-                        control={form.control}
+                        control={builderForm.control}
                         name="isPublic"
                         render={({ field }) => (
                           <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
@@ -1052,15 +1998,15 @@ export function PokeDexterControl() {
                             <div className="space-y-0.5">
                               <FormLabel>Public Access</FormLabel>
                               <FormDescription>
-                                Allow public access to this chatflow
+                                Allow access without auth
                               </FormDescription>
-              </div>
+                            </div>
                           </FormItem>
                         )}
                       />
 
                       <FormField
-                        control={form.control}
+                        control={builderForm.control}
                         name="speechToText"
                         render={({ field }) => (
                           <FormItem className="flex items-center gap-2 p-4 border rounded-lg">
@@ -1071,63 +2017,89 @@ export function PokeDexterControl() {
                               />
                             </FormControl>
                             <div className="space-y-0.5">
-                              <FormLabel>Speech to Text</FormLabel>
+                              <FormLabel>Voice Input</FormLabel>
                               <FormDescription>
-                                Enable voice input for this chatflow
+                                Enable speech recognition
                               </FormDescription>
-                </div>
+                            </div>
                           </FormItem>
                         )}
                       />
-              </div>
-
-                    <div className="border rounded-lg p-4">
-                      <h4 className="font-medium mb-2">Raw Configuration</h4>
-                      <Textarea
-                        className="font-mono text-sm"
-                        rows={20}
-                        value={JSON.stringify(form.getValues(), null, 2)}
-                        readOnly
-                      />
                     </div>
-                    </div>
-        </TabsContent>
-              </Tabs>
+                  </TabsContent>
+                </Tabs>
 
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Save Template
-                </Button>
-              </div>
-            </form>
-          </Form>
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => builderForm.reset()}
+                    disabled={isSubmitting}
+                  >
+                    Reset
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    onClick={() => console.log('Submit button clicked')}
+                  >
+                    {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Create Chatflow
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </Card>
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium">Analytics & Feedback</h3>
-              <p className="text-sm text-muted-foreground">
-                Monitor performance and user feedback
-              </p>
+          <Card className="p-8 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-4 rounded-full bg-muted">
+                <BarChart2 className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-medium">Analytics Dashboard Coming Soon</h3>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  We're building a comprehensive analytics dashboard to help you monitor chatflow performance, 
+                  user engagement metrics, and conversation insights. Stay tuned for detailed analytics 
+                  and reporting features.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" disabled className="gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Date Range
+                </Button>
+                <Button variant="outline" disabled className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Export Report
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="gap-2">
-                <Calendar className="w-4 h-4" />
-                Date Range
-                          </Button>
-              <Button variant="outline" className="gap-2">
-                <Download className="w-4 h-4" />
-                Export Report
-                          </Button>
-            </div>
-          </div>
-          {/* Analytics dashboard and feedback management UI */}
+          </Card>
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
-          {/* Settings content */}
+          <Card className="p-8 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-4 rounded-full bg-muted">
+                <Settings className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-medium">Settings Coming Soon</h3>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                  Advanced configuration settings for PokéDexter are on the way. You'll soon be able to 
+                  customize global preferences, manage API integrations, and configure security settings 
+                  all in one place.
+                </p>
+              </div>
+              <Button variant="outline" disabled className="gap-2">
+                <Settings className="w-4 h-4" />
+                Configure Settings
+              </Button>
+            </div>
+          </Card>
         </TabsContent>
       </Tabs>
     </Card>

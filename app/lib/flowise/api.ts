@@ -1,5 +1,6 @@
-import axios from 'axios'
+import axios, { AxiosRequestConfig } from 'axios'
 import type { Document, VectorConfig, ProcessingConfig } from './types'
+import type { ChatFlow } from '@/lib/supabase/chatflows'
 
 // Custom error class for Flowise API errors
 export class FlowiseAPIError extends Error {
@@ -13,99 +14,162 @@ export class FlowiseAPIError extends Error {
   }
 }
 
-export const FlowiseAPI = {
-  async getChatFlows() {
-    try {
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
-          }
-        }
-      )
-      return response.data
-    } catch (error) {
-      console.error('Failed to fetch chatflows:', error)
-      throw new FlowiseAPIError(
-        'Failed to fetch chatflows',
-        'API_ERROR',
-        error
-      )
-    }
-  },
+interface ChatFlowListResponse {
+  chatflows: ChatFlow[]
+  total: number
+  page: number
+  pageSize: number
+}
 
-  async getChatflow(id: string) {
-    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
-    try {
-      const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows/${id}`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
-          }
-        }
-      )
-      return response.data
-    } catch (error) {
-      console.error('Failed to fetch chatflow:', error)
-      throw new FlowiseAPIError(
-        'Failed to fetch chatflow',
-        'API_ERROR',
-        error
-      )
-    }
-  },
+// Update to match API response exactly (no wrapper)
+type ChatFlowResponse = ChatFlow
 
-  async updateChatflow(id: string, data: any) {
-    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
-    if (!data) throw new FlowiseAPIError('Chatflow data is required', 'MISSING_DATA')
-    try {
-      const response = await axios.put(
-        `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows/${id}`,
-        data,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
-          }
-        }
-      )
-      return response.data
-    } catch (error) {
-      console.error('Failed to update chatflow:', error)
-      throw new FlowiseAPIError(
-        'Failed to update chatflow',
-        'API_ERROR',
-        error
-      )
-    }
-  },
+interface ChatFlowDeleteResponse {
+  message: string
+}
 
-  async deleteChatflow(id: string) {
-    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
+interface CreateChatflowRequest {
+  name: string
+  flowData: string
+  deployed: boolean
+  isPublic: boolean
+  apikeyid?: string
+  chatbotConfig?: string
+  apiConfig?: string
+  analytic?: string
+  speechToText?: string
+  category?: string
+  type: 'CHATFLOW' | 'MULTIAGENT'
+}
+
+export class FlowiseAPI {
+  private static async request<T>(endpoint: string, options: Partial<AxiosRequestConfig> = {}) {
+    // Ensure endpoint starts with /
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}${normalizedEndpoint}`
+    
     try {
-      const response = await axios.delete(
-        `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows/${id}`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`
-          }
-        }
-      )
-      return response.data
+      console.log('Making API request:', {
+        url,
+        method: options.method || 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`,
+          ...options.headers
+        },
+        data: options.data
+      })
+
+      const response = await axios({
+        url,
+        method: options.method || 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_FLOWISE_API_KEY}`,
+          ...options.headers
+        },
+        ...options
+      })
+
+      console.log('API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data
+      })
+
+      // For list responses, wrap in expected format if not already wrapped
+      if (Array.isArray(response.data) && endpoint.includes('/chatflows')) {
+        return {
+          chatflows: response.data,
+          total: response.data.length,
+          page: 1,
+          pageSize: response.data.length
+        } as T
+      }
+
+      return response.data as T
     } catch (error) {
-      console.error('Failed to delete chatflow:', error)
+      if (axios.isAxiosError(error)) {
+        console.error('API Error Details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message
+        })
+      } else {
+        console.error('Non-Axios Error:', error)
+      }
       throw new FlowiseAPIError(
-        'Failed to delete chatflow',
+        `Failed to ${options.method || 'GET'} ${endpoint}`,
         'API_ERROR',
         error
       )
     }
+  }
+
+  static async getChatFlows(): Promise<ChatFlowListResponse> {
+    return this.request<ChatFlowListResponse>('/chatflows')
+  }
+
+  static async getChatflow(id: string): Promise<ChatFlowResponse> {
+    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
+    return this.request<ChatFlowResponse>(`/chatflows/${id}`)
+  }
+
+  static async createChatflow(data: Partial<ChatFlow>): Promise<ChatFlowResponse> {
+    // Transform the data to match the API spec exactly
+    const requestData: CreateChatflowRequest = {
+      name: data.name || '',
+      flowData: typeof data.flowData === 'string' ? data.flowData : JSON.stringify(data.flowData || {}),
+      deployed: data.deployed || false,
+      isPublic: data.isPublic || false,
+      type: 'CHATFLOW', // Always use CHATFLOW as per docs
+      chatbotConfig: typeof data.chatbotConfig === 'string' ? data.chatbotConfig : JSON.stringify(data.chatbotConfig || {}),
+      apikeyid: data.apikeyid || undefined,
+      apiConfig: data.apiConfig || undefined,
+      analytic: data.analytic || undefined,
+      speechToText: data.speechToText ? 'true' : 'false',
+      category: Array.isArray(data.category) 
+        ? data.category.join(';') 
+        : (data.category || undefined)
+    }
+
+    console.log('Making createChatflow API call to:', `${process.env.NEXT_PUBLIC_FLOWISE_API_URL}/chatflows`)
+    console.log('Request headers:', {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + process.env.NEXT_PUBLIC_FLOWISE_API_KEY?.substring(0, 5) + '...'
+    })
+    console.log('Request body:', JSON.stringify(requestData, null, 2))
+    
+    return this.request<ChatFlowResponse>('/chatflows', {
+      method: 'POST',
+      data: requestData
+    })
+  }
+
+  static async updateChatflow(id: string, data: Partial<ChatFlow>): Promise<ChatFlowResponse> {
+    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
+    return this.request<ChatFlowResponse>(`/chatflows/${id}`, {
+      method: 'PUT',
+      data
+    })
+  }
+
+  static async deleteChatflow(id: string): Promise<ChatFlowDeleteResponse> {
+    if (!id) throw new FlowiseAPIError('Chatflow ID is required', 'MISSING_ID')
+    return this.request<ChatFlowDeleteResponse>(`/chatflows/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  static async validateChatflow(data: Partial<ChatFlow>): Promise<ChatFlowResponse> {
+    return this.request<ChatFlowResponse>('/chatflows/validate', {
+      method: 'POST',
+      data
+    })
   }
 }
 

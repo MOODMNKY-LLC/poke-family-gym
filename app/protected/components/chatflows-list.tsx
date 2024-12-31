@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FlowiseAPI } from '@/lib/flowise/api'
-import type { ChatFlow } from '@/lib/flowise/types'
+import type { ChatFlow } from '@/lib/supabase/chatflows'
 import {
   Bot,
   Copy,
@@ -43,6 +43,16 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface ChatflowsListProps {
   onSelect?: (chatflow: ChatFlow | null) => void
@@ -55,6 +65,30 @@ interface KanbanColumn {
   title: string
   description: string
   filter: (chatflow: ChatFlow) => boolean
+}
+
+interface RawChatFlowData {
+  id?: string
+  name?: string
+  flowData?: string
+  deployed?: boolean
+  isPublic?: boolean
+  chatbotConfig?: string | null
+  type?: string
+  apikeyid?: string | null
+  apiConfig?: string | null
+  analytic?: string | null
+  speechToText?: string | null
+  followUpPrompts?: string | null
+  category?: string | null
+  createdDate?: string
+  updatedDate?: string
+}
+
+function isValidChatflow(cf: unknown): cf is RawChatFlowData {
+  if (!cf || typeof cf !== 'object') return false
+  const data = cf as Record<string, unknown>
+  return typeof data.id === 'string' && data.id.length > 0
 }
 
 const getDeploymentInfo = (isDeployed: boolean) => ({
@@ -113,11 +147,11 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
   const fetchChatflows = async () => {
     setIsLoading(true)
     try {
-      const response = await FlowiseAPI.getChatFlows()
-      const validChatflows = (response.chatflows || [])
-        .filter((cf): cf is ChatFlow => Boolean(cf?.id))
+      const { chatflows: rawChatflows } = await FlowiseAPI.getChatFlows()
+      const validChatflows = (rawChatflows || [])
+        .filter(isValidChatflow)
         .map(cf => ({
-          id: cf.id || '',
+          id: cf.id,
           name: cf.name || '',
           flowData: cf.flowData || '',
           deployed: cf.deployed ?? false,
@@ -194,8 +228,16 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
     if (!chatflow.id) return
     try {
       setIsLoading(true)
+      
+      // Delete the chatflow using the FlowiseAPI
       await FlowiseAPI.deleteChatflow(chatflow.id)
-      toast.success('Chatflow deleted')
+      
+      // Also remove any family member assignments
+      await fetch(`/api/flowise/chatflows/${chatflow.id}`, {
+        method: 'DELETE',
+      })
+      
+      toast.success('Chatflow deleted successfully')
       fetchChatflows()
       setShowDeleteConfirm(false)
       setSelectedChatflow(null)
@@ -230,7 +272,19 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
     }
   }
 
-  // Load initial data
+  // Add refresh handler
+  useEffect(() => {
+    const handleRefresh = async (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.log('Refresh event received:', customEvent.detail)
+      await fetchChatflows()
+    }
+
+    window.addEventListener('chatflows:refresh', handleRefresh)
+    return () => window.removeEventListener('chatflows:refresh', handleRefresh)
+  }, [])
+
+  // Initial fetch
   useEffect(() => {
     fetchChatflows()
   }, [])
@@ -925,6 +979,44 @@ export function ChatflowsList({ onSelect }: ChatflowsListProps) {
         viewMode === 'gallery' ? renderGalleryView(filteredChatflows) : 
         renderKanbanView(filteredChatflows)
       )}
+
+      <AlertDialog 
+        open={showDeleteConfirm} 
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open)
+          if (!open) setSelectedChatflow(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Chatflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedChatflow?.name}"? This action cannot be undone.
+              All family member assignments will also be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedChatflow && deleteChatflow(selectedChatflow)}
+              disabled={isLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash className="mr-2 h-4 w-4" />
+                  Delete
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 } 

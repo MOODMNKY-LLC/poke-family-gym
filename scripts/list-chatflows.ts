@@ -3,9 +3,9 @@ import type { ChatFlow } from '../lib/flowise/types'
 
 async function listChatflows() {
   try {
-    const chatflows = await FlowiseAPI.getChatFlows()
+    const response = await FlowiseAPI.getChatFlows()
     console.log('\nChatflows:\n')
-    console.table(chatflows.map((flow: ChatFlow) => ({
+    console.table(response.chatflows.map((flow: ChatFlow) => ({
       id: flow.id,
       name: flow.name,
       deployed: flow.deployed ? '✅' : '❌',

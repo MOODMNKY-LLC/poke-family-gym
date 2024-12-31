@@ -1,101 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/client'
-import { flowiseRequest, validateChatflowConfig, handleFlowiseError } from '../config'
+import { handleFlowiseError } from '@/app/api/flowise/config'
+import { FlowiseAPI } from '@/lib/flowise/api'
+import type { ChatFlow } from '@/lib/flowise/types'
 
-// Helper function to transform Flowise data to Supabase format
-function transformFlowiseToSupabase(flowiseData: any) {
-  return {
-    id: flowiseData.id,
-    name: flowiseData.name,
-    flowData: flowiseData.flowData,
-    deployed: flowiseData.deployed || false,
-    isPublic: flowiseData.isPublic || false,
-    apikeyid: flowiseData.apikeyid,
-    chatbotConfig: flowiseData.chatbotConfig ? JSON.parse(flowiseData.chatbotConfig) : null,
-    category: flowiseData.category,
-    speechToText: flowiseData.speechToText,
-    type: flowiseData.type || 'chat',
-    followUpPrompts: flowiseData.followUpPrompts,
-    createdDate: flowiseData.createdDate || new Date().toISOString(),
-    updatedDate: flowiseData.updatedDate || new Date().toISOString(),
-    apiConfig: flowiseData.apiConfig ? JSON.parse(flowiseData.apiConfig) : null,
-    analytic: flowiseData.analytic ? JSON.parse(flowiseData.analytic) : null,
-    systemMessage: flowiseData.systemMessage,
-    temperature: flowiseData.temperature || 0.7,
-    maxTokens: flowiseData.maxTokens || 2000,
-    topP: flowiseData.topP || 0.95,
-    frequencyPenalty: flowiseData.frequencyPenalty || 0,
-    presencePenalty: flowiseData.presencePenalty || 0,
-    memoryType: flowiseData.memoryType || 'simple',
-    memoryWindow: flowiseData.memoryWindow || 5
-  }
-}
-
-// Helper function to transform Supabase data to Flowise format
-function transformSupabaseToFlowise(supabaseData: any) {
-  return {
-    id: supabaseData.id,
-    name: supabaseData.name,
-    flowData: supabaseData.flowData,
-    deployed: supabaseData.deployed,
-    isPublic: supabaseData.isPublic,
-    apikeyid: supabaseData.apikeyid,
-    chatbotConfig: supabaseData.chatbotConfig ? JSON.stringify(supabaseData.chatbotConfig) : null,
-    category: supabaseData.category,
-    speechToText: supabaseData.speechToText,
-    type: supabaseData.type,
-    followUpPrompts: supabaseData.followUpPrompts,
-    createdDate: supabaseData.createdDate,
-    updatedDate: supabaseData.updatedDate,
-    apiConfig: supabaseData.apiConfig ? JSON.stringify(supabaseData.apiConfig) : null,
-    analytic: supabaseData.analytic ? JSON.stringify(supabaseData.analytic) : null,
-    systemMessage: supabaseData.systemMessage,
-    temperature: supabaseData.temperature,
-    maxTokens: supabaseData.maxTokens,
-    topP: supabaseData.topP,
-    frequencyPenalty: supabaseData.frequencyPenalty,
-    presencePenalty: supabaseData.presencePenalty,
-    memoryType: supabaseData.memoryType,
-    memoryWindow: supabaseData.memoryWindow
-  }
-}
-
-// GET /api/flowise/chatflows - Get all chatflows
-export async function GET(req: NextRequest) {
+// GET /api/flowise/chatflows - List all chatflows
+export async function GET() {
   try {
-    // Get chatflows from Flowise
-    const flowiseData = await flowiseRequest('chatflows')
+    // 1. Get chatflows from Flowise
+    const flowiseResponse = await FlowiseAPI.getChatFlows()
+    const flowiseChatflows = flowiseResponse.chatflows || []
 
-    // Get chatflows from Supabase
+    // 2. Get chatflows from Supabase
     const supabase = createClient()
-    const { data: supabaseData, error: supabaseError } = await supabase
+    const { data: supabaseChatflows, error: supabaseError } = await supabase
       .from('chat_flow')
       .select('*')
-      .order('createdDate', { ascending: false })
 
     if (supabaseError) {
-      throw supabaseError
+      console.error('Error fetching from Supabase:', supabaseError)
+      // Continue with Flowise data only
     }
 
-    // Merge data, preferring Flowise data but keeping Supabase's additional fields
-    const mergedFlows = (supabaseData || []).map(flow => transformSupabaseToFlowise(flow))
-    
-    flowiseData.forEach((flowiseFlow: any) => {
-      const existingIndex = mergedFlows.findIndex(f => f.id === flowiseFlow.id)
-      if (existingIndex >= 0) {
-        mergedFlows[existingIndex] = {
-          ...mergedFlows[existingIndex],
-          ...flowiseFlow,
-          flowData: typeof flowiseFlow.flowData === 'string' 
-            ? flowiseFlow.flowData 
-            : JSON.stringify(flowiseFlow.flowData)
-        }
-      } else {
-        mergedFlows.push(flowiseFlow)
+    // 3. Merge data, preferring Flowise but keeping Supabase-only entries
+    const mergedChatflows = flowiseChatflows.map(flowiseFlow => {
+      const supabaseFlow = supabaseChatflows?.find(sf => sf.id === flowiseFlow.id)
+      return {
+        ...supabaseFlow,
+        ...flowiseFlow,
+        flowData: typeof flowiseFlow.flowData === 'string'
+          ? flowiseFlow.flowData
+          : JSON.stringify(flowiseFlow.flowData)
       }
     })
 
-    return NextResponse.json(mergedFlows)
+    // Add any chatflows that exist only in Supabase
+    if (supabaseChatflows) {
+      const flowiseIds = new Set(flowiseChatflows.map(f => f.id))
+      const supabaseOnlyFlows = supabaseChatflows.filter(sf => !flowiseIds.has(sf.id))
+      mergedChatflows.push(...supabaseOnlyFlows)
+    }
+
+    return NextResponse.json({ chatflows: mergedChatflows })
   } catch (error) {
     console.error('Error in GET /api/flowise/chatflows:', error)
     return NextResponse.json(
@@ -106,114 +52,45 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/flowise/chatflows - Create a new chatflow
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json()
-    validateChatflowConfig(body)
+    const body = await request.json()
 
-    // Create in Flowise
-    const flowiseData = await flowiseRequest('chatflows', {
-      method: 'POST',
-      body: JSON.stringify(body)
-    })
+    // 1. Create in Flowise
+    const flowiseResponse = await FlowiseAPI.createChatflow(body)
+    
+    if (!flowiseResponse || !flowiseResponse.id) {
+      throw new Error('Failed to create chatflow in Flowise')
+    }
 
-    // Transform and sync with Supabase
+    // 2. Store in Supabase
     const supabase = createClient()
-    const supabaseData = transformFlowiseToSupabase(flowiseData)
-
     const { error: supabaseError } = await supabase
       .from('chat_flow')
-      .insert([supabaseData])
+      .insert({
+        id: flowiseResponse.id,
+        name: flowiseResponse.name,
+        flowData: typeof flowiseResponse.flowData === 'string'
+          ? flowiseResponse.flowData
+          : JSON.stringify(flowiseResponse.flowData),
+        deployed: flowiseResponse.deployed,
+        isPublic: flowiseResponse.isPublic,
+        category: flowiseResponse.category,
+        type: flowiseResponse.type || 'chat',
+        chatbotConfig: flowiseResponse.chatbotConfig,
+        apiConfig: flowiseResponse.apiConfig,
+        analytic: flowiseResponse.analytic,
+        speechToText: flowiseResponse.speechToText
+      })
 
     if (supabaseError) {
       console.warn('Failed to sync with Supabase:', supabaseError)
+      // Don't throw as Flowise creation was successful
     }
 
-    return NextResponse.json(flowiseData)
+    return NextResponse.json(flowiseResponse)
   } catch (error) {
     console.error('Error in POST /api/flowise/chatflows:', error)
-    return NextResponse.json(
-      handleFlowiseError(error),
-      { status: 500 }
-    )
-  }
-}
-
-// PATCH /api/flowise/chatflows/[id] - Update a chatflow
-export async function PATCH(req: NextRequest) {
-  try {
-    const id = req.url.split('/').pop()
-    if (!id) {
-      throw new Error('Chatflow ID is required')
-    }
-
-    const body = await req.json()
-    validateChatflowConfig(body)
-
-    // Update in Flowise
-    const flowiseData = await flowiseRequest(`chatflows/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body)
-    })
-
-    // Transform and sync with Supabase
-    const supabase = createClient()
-    const supabaseData = transformFlowiseToSupabase(flowiseData)
-
-    const { error: supabaseError } = await supabase
-      .from('chat_flow')
-      .update(supabaseData)
-      .eq('id', id)
-
-    if (supabaseError) {
-      console.warn('Failed to sync with Supabase:', supabaseError)
-    }
-
-    return NextResponse.json(flowiseData)
-  } catch (error) {
-    console.error('Error in PATCH /api/flowise/chatflows:', error)
-    return NextResponse.json(
-      handleFlowiseError(error),
-      { status: 500 }
-    )
-  }
-}
-
-// DELETE /api/flowise/chatflows/[id] - Delete a chatflow
-export async function DELETE(req: NextRequest) {
-  try {
-    const id = req.url.split('/').pop()
-    if (!id) {
-      throw new Error('Chatflow ID is required')
-    }
-
-    // Delete from Flowise
-    await flowiseRequest(`chatflows/${id}`, {
-      method: 'DELETE'
-    })
-
-    // Sync with Supabase
-    const supabase = createClient()
-    
-    // First, remove any references from family_members
-    await supabase
-      .from('family_members')
-      .update({ chatflow_id: null })
-      .eq('chatflow_id', id)
-
-    // Then delete the chatflow
-    const { error: supabaseError } = await supabase
-      .from('chat_flow')
-      .delete()
-      .eq('id', id)
-
-    if (supabaseError) {
-      console.warn('Failed to sync with Supabase:', supabaseError)
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error in DELETE /api/flowise/chatflows:', error)
     return NextResponse.json(
       handleFlowiseError(error),
       { status: 500 }
