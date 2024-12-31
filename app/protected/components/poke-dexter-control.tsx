@@ -115,6 +115,7 @@ const chatflowSchema = z.object({
   memoryType: z.string().default('zep'),
   memoryWindow: z.number().min(1).max(50).default(10),
   memoryBaseUrl: z.string().optional(),
+  memorySessionId: z.string().optional(),
   aiPrefix: z.string().default('ai'),
   humanPrefix: z.string().default('human'),
   isPublic: z.boolean().default(false),
@@ -319,6 +320,7 @@ export function PokeDexterControl() {
       memoryType: 'zep',
       memoryWindow: 10,
       memoryBaseUrl: '',
+      memorySessionId: '',
       aiPrefix: 'ai',
       humanPrefix: 'human',
       isPublic: false,
@@ -359,6 +361,7 @@ export function PokeDexterControl() {
           memoryType: memoryNode?.data?.inputs?.memoryType || 'zep',
           memoryWindow: Number(memoryNode?.data?.inputs?.k) || 10,
           memoryBaseUrl: memoryNode?.data?.inputs?.memoryBaseUrl || '',
+          memorySessionId: memoryNode?.data?.inputs?.sessionId || '',
           aiPrefix: memoryNode?.data?.inputs?.aiPrefix || 'ai',
           humanPrefix: memoryNode?.data?.inputs?.humanPrefix || 'human',
           isPublic: Boolean(selectedChatflow.isPublic),
@@ -439,7 +442,11 @@ export function PokeDexterControl() {
       if (memoryNode) {
         memoryNode.data.inputs = {
           ...memoryNode.data.inputs,
-          k: Number(data.memoryWindow)
+          k: Number(data.memoryWindow),
+          sessionId: data.memorySessionId || '',
+          baseURL: data.memoryBaseUrl || '',
+          aiPrefix: data.aiPrefix,
+          humanPrefix: data.humanPrefix
         }
       } else {
         console.warn('Memory node not found')
@@ -1525,6 +1532,27 @@ export function PokeDexterControl() {
                                 </FormControl>
                                 <FormDescription>
                                 Number of previous messages to include in context
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="memorySessionId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Session ID</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  value={field.value || ''} 
+                                  placeholder="e.g., family-123 or pokemon-trainer-red" 
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Add a custom identifier to group related conversations. Great for family groups or specific training sessions!
                               </FormDescription>
                               <FormMessage />
                             </FormItem>

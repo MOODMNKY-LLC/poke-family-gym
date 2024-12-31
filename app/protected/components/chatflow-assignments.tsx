@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import {
   Select,
@@ -18,6 +18,7 @@ import type { ChatFlow } from '@/lib/flowise/types'
 import { FlowiseAPI } from '@/lib/flowise/api'
 import { Button } from '@/components/ui/button'
 import { updateChatflowAssignments } from './actions'
+import { Input } from '@/components/ui/input'
 
 interface FamilyMember {
   id: string
@@ -25,10 +26,36 @@ interface FamilyMember {
   chatflow_id: string | null
   avatar_url: string | null
   chat_flow?: ChatFlow | null
+  session_id: string | null
+  family_id: string
 }
 
 interface AssignmentChanges {
-  [memberId: string]: string | null
+  [memberId: string]: {
+    chatflow_id: string | null
+    session_id: string | null
+  }
+}
+
+interface AssignmentUpdate {
+  id: string
+  chatflow_id: string | null
+  session_id: string | null
+  updated_at: string
+}
+
+interface FlowNode {
+  data?: {
+    name?: string
+    type?: string
+    inputs?: {
+      systemMessage?: string
+    }
+  }
+}
+
+interface FlowData {
+  nodes?: FlowNode[]
 }
 
 export function ChatflowAssignments() {
@@ -40,64 +67,100 @@ export function ChatflowAssignments() {
   const [pendingAssignments, setPendingAssignments] = useState<AssignmentChanges>({})
   const supabase = createClient()
 
-  // Fetch family members and chatflows
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        // Fetch family members with their assigned chatflows from Supabase
-        const { data: membersData, error: membersError } = await supabase
-          .from('family_members')
-          .select(`
-            id,
-            display_name,
-            chatflow_id,
-            avatar_url
-          `)
+  // Memoize data fetching function
+  const fetchData = useCallback(async () => {
+    try {
+      const { data: membersData, error: membersError } = await supabase
+        .from('family_members')
+        .select(`
+          id,
+          display_name,
+          chatflow_id,
+          avatar_url,
+          family_id,
+          session_id
+        `)
+        .throwOnError()
 
-        if (membersError) throw membersError
-
-        // Fetch all available chatflows using FlowiseAPI
-        const { chatflows } = await FlowiseAPI.getChatFlows()
-        
-        // For each member, fetch their assigned chatflow details
-        const membersWithChatflows = await Promise.all(
-          (membersData || []).map(async (member) => {
-            if (member.chatflow_id) {
-              try {
-                const chatflow = await FlowiseAPI.getChatFlow(member.chatflow_id)
-                return { ...member, chat_flow: chatflow }
-              } catch (e) {
-                console.error(`Error fetching chatflow for member ${member.id}:`, e)
-                return member
-              }
-            }
-            return member
-          })
-        )
-
-        setMembers(membersWithChatflows)
-        setChatflows(chatflows)
-      } catch (error) {
-        console.error('Error fetching data:', error)
-        toast.error('Failed to load assignments')
-      } finally {
-        setIsLoading(false)
+      if (membersError) {
+        console.error('Supabase query error:', membersError)
+        throw membersError
       }
+
+      if (!membersData) {
+        throw new Error('No data returned from Supabase')
+      }
+
+      const { chatflows } = await FlowiseAPI.getChatFlows()
+      
+      const membersWithChatflows = await Promise.all(
+        membersData.map(async (member): Promise<FamilyMember> => {
+          const baseData: FamilyMember = {
+            ...member,
+            session_id: member.session_id || member.family_id,
+            chat_flow: null
+          }
+
+          if (!member.chatflow_id) return baseData
+
+          try {
+            const chatflow = await FlowiseAPI.getChatFlow(member.chatflow_id)
+            return { 
+              ...baseData,
+              chat_flow: chatflow
+            }
+          } catch (e) {
+            console.error(`Error fetching chatflow for member ${member.id}:`, e)
+            return baseData
+          }
+        })
+      )
+
+      setMembers(membersWithChatflows)
+      setChatflows(chatflows)
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      toast.error('Failed to load assignments. Please try refreshing the page.')
+    } finally {
+      setIsLoading(false)
     }
+  }, [supabase])
 
-    fetchData()
-  }, [])
+  useEffect(() => {
+    void fetchData()
+  }, [fetchData])
 
-  // Handle assignment change
-  function handleAssignmentChange(memberId: string, chatflowId: string | null) {
-    setPendingAssignments(prev => ({
-      ...prev,
-      [memberId]: chatflowId
-    }))
-  }
+  const handleAssignmentChange = useCallback((memberId: string, chatflowId: string | null) => {
+    setPendingAssignments(prev => {
+      const member = members.find(m => m.id === memberId)
+      if (!member) return prev
 
-  // Submit all pending assignments
-  async function handleSubmitAssignments() {
+      return {
+        ...prev,
+        [memberId]: {
+          chatflow_id: chatflowId,
+          session_id: prev[memberId]?.session_id ?? member.family_id
+        }
+      }
+    })
+  }, [members])
+
+  const handleSessionIdChange = useCallback((memberId: string, sessionId: string | null) => {
+    setPendingAssignments(prev => {
+      const member = members.find(m => m.id === memberId)
+      if (!member) return prev
+
+      return {
+        ...prev,
+        [memberId]: {
+          chatflow_id: prev[memberId]?.chatflow_id ?? null,
+          session_id: sessionId ?? member.family_id
+        }
+      }
+    })
+  }, [members])
+
+  const handleSubmitAssignments = useCallback(async () => {
     if (Object.keys(pendingAssignments).length === 0) {
       toast.info('No changes to save')
       return
@@ -105,40 +168,45 @@ export function ChatflowAssignments() {
 
     setIsSubmitting(true)
     try {
-      // Prepare the assignments for batch update
-      const updates = Object.entries(pendingAssignments).map(([memberId, chatflowId]) => ({
-        id: memberId,
-        chatflow_id: chatflowId,
-        updated_at: new Date().toISOString()
-      }))
+      const updates: AssignmentUpdate[] = Object.entries(pendingAssignments).map(([memberId, changes]) => {
+        const member = members.find(m => m.id === memberId)
+        if (!member) throw new Error(`Member ${memberId} not found`)
 
-      // Submit the batch update using server action
+        return {
+          id: memberId,
+          chatflow_id: changes.chatflow_id,
+          session_id: changes.session_id ?? member.family_id,
+          updated_at: new Date().toISOString()
+        }
+      })
+
       const { data, error } = await updateChatflowAssignments(updates)
 
       if (error) {
+        console.error('Assignment update error:', error)
         throw new Error(error)
       }
 
-      // Update local state with new assignments
       const updatedMembers = await Promise.all(
-        members.map(async (member) => {
-          const newChatflowId = pendingAssignments[member.id]
-          if (newChatflowId !== undefined) {
-            try {
-              const chatflow = newChatflowId 
-                ? await FlowiseAPI.getChatFlow(newChatflowId)
-                : null
-              return {
-                ...member,
-                chatflow_id: newChatflowId,
-                chat_flow: chatflow
-              }
-            } catch (e) {
-              console.error(`Error fetching updated chatflow for member ${member.id}:`, e)
-              return member
+        members.map(async (member): Promise<FamilyMember> => {
+          const changes = pendingAssignments[member.id]
+          if (!changes) return member
+
+          try {
+            const chatflow = changes.chatflow_id 
+              ? await FlowiseAPI.getChatFlow(changes.chatflow_id)
+              : null
+
+            return {
+              ...member,
+              chatflow_id: changes.chatflow_id,
+              session_id: changes.session_id ?? member.family_id,
+              chat_flow: chatflow
             }
+          } catch (e) {
+            console.error(`Error fetching updated chatflow for member ${member.id}:`, e)
+            return member
           }
-          return member
         })
       )
 
@@ -151,21 +219,24 @@ export function ChatflowAssignments() {
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [members, pendingAssignments])
 
   function getSystemMessage(chatflow: ChatFlow): string {
     try {
-      if (chatflow.flowData) {
-        const flowData = JSON.parse(chatflow.flowData)
-        const toolAgentNode = flowData.nodes?.find((node: any) => 
-          node.data?.name === 'toolAgent' || node.type === 'customNode'
-        )
-        return toolAgentNode?.data?.inputs?.systemMessage || ''
-      }
+      if (!chatflow.flowData) return ''
+
+      const flowData: FlowData = JSON.parse(chatflow.flowData)
+      
+      const toolAgentNode = flowData.nodes?.find(node => 
+        node.data?.name === 'toolAgent' || 
+        node.data?.type === 'customNode'
+      )
+
+      return toolAgentNode?.data?.inputs?.systemMessage || ''
     } catch (e) {
       console.error('Error parsing flowData:', e)
+      return ''
     }
-    return ''
   }
 
   if (isLoading) {
@@ -297,9 +368,10 @@ export function ChatflowAssignments() {
             <ScrollArea className="h-[400px]">
               <div className="space-y-2">
                 {members.map((member) => {
-                  const pendingChatflowId = pendingAssignments[member.id]
-                  const isChanged = pendingChatflowId !== undefined
-                  const currentChatflowId = isChanged ? pendingChatflowId : member.chatflow_id
+                  const pendingChanges = pendingAssignments[member.id]
+                  const isChanged = !!pendingChanges
+                  const currentChatflowId = isChanged ? pendingChanges.chatflow_id : member.chatflow_id
+                  const currentSessionId = isChanged ? pendingChanges.session_id : member.session_id
 
                   return (
                     <div 
@@ -317,34 +389,45 @@ export function ChatflowAssignments() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Select
-                          value={currentChatflowId ?? 'null'}
-                          onValueChange={(value) => handleAssignmentChange(
-                            member.id,
-                            value === 'null' ? null : value
-                          )}
-                          disabled={isSubmitting}
-                        >
-                          <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder="Select a chatflow" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="null">
-                              <div className="flex items-center gap-2">
-                                <Link2Off className="h-4 w-4" />
-                                <span>None</span>
-                              </div>
-                            </SelectItem>
-                            {chatflows.map((chatflow) => (
-                              <SelectItem key={chatflow.id} value={chatflow.id ?? ''}>
+                        <div className="flex flex-col gap-2">
+                          <Select
+                            value={currentChatflowId ?? 'null'}
+                            onValueChange={(value) => handleAssignmentChange(
+                              member.id,
+                              value === 'null' ? null : value
+                            )}
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="Select a chatflow" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="null">
                                 <div className="flex items-center gap-2">
-                                  <Link2 className="h-4 w-4" />
-                                  <span>{chatflow.name}</span>
+                                  <Link2Off className="h-4 w-4" />
+                                  <span>None</span>
                                 </div>
                               </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                              {chatflows.map((chatflow) => (
+                                <SelectItem key={chatflow.id} value={chatflow.id ?? ''}>
+                                  <div className="flex items-center gap-2">
+                                    <Link2 className="h-4 w-4" />
+                                    <span>{chatflow.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <Input
+                            placeholder="Enter session ID (optional)"
+                            value={currentSessionId || ''}
+                            onChange={(e) => handleSessionIdChange(member.id, e.target.value || null)}
+                            disabled={isSubmitting}
+                            className="w-[200px]"
+                          />
+                        </div>
+
                         {isChanged && (
                           <Button
                             variant="ghost"

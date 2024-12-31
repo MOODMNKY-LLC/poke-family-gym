@@ -7,6 +7,7 @@ import { FlowiseAPI } from '@/lib/flowise/api'
 interface AssignmentUpdate {
   id: string
   chatflow_id: string | null
+  session_id?: string | null
   updated_at: string
 }
 
@@ -98,33 +99,30 @@ export async function updateChatflowAssignments(updates: AssignmentUpdate[]) {
       return {
         ...existing,
         chatflow_id: update.chatflow_id,
+        session_id: update.session_id,
         updated_at: update.updated_at
       }
     })
 
-    console.log('Merged updates:', mergedUpdates)
-
-    // Update the members
+    // Update family members with new assignments
     const { data, error } = await supabase
       .from('family_members')
       .upsert(mergedUpdates, {
         onConflict: 'id',
         ignoreDuplicates: false
       })
-      .select()
 
     if (error) {
-      console.error('Server error updating assignments:', error)
+      console.error('Error updating assignments:', error)
       throw new Error(error.message)
     }
 
-    revalidatePath('/protected')
     return { data, error: null }
   } catch (error) {
-    console.error('Server action error:', error)
-    return { 
-      data: null, 
-      error: error instanceof Error ? error.message : 'Failed to update assignments' 
+    console.error('Error in updateChatflowAssignments:', error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     }
   }
 } 
