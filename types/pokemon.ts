@@ -1,35 +1,39 @@
-export interface FamilyPokedexEntry {
-  id: string
-  pokemonId: number
-  familyId: string
-  caughtBy: {
-    id: string
-    display_name: string
-    avatar_url: string | null
-  } | null
-  nickname: string | null
-  level: number
-  isShiny: boolean
-  friendship: number
-  experience: number
-  caught_at: string
-  caught_count: number
-  is_favorite: boolean
-  notes: string | null
+export interface Pokeball {
+  name: string
+  baseValue: number
+  rarity: 'common' | 'uncommon' | 'rare' | 'ultra_rare'
+  quantity: number
+  image: string
 }
 
-export interface PokemonWithEntry {
-  id: number
-  name: string
-  sprites: {
-    front_default: string | null
-    front_shiny: string | null
+// Predefined Pokéballs with their base values
+export const pokeballs: Pokeball[] = [
+  {
+    name: 'Poké Ball',
+    baseValue: 1,
+    rarity: 'common',
+    quantity: 50,
+    image: '/images/pokeballs/poke-ball.png'
+  },
+  {
+    name: 'Great Ball',
+    baseValue: 2,
+    rarity: 'uncommon',
+    quantity: 30,
+    image: '/images/pokeballs/great-ball.png'
+  },
+  {
+    name: 'Ultra Ball',
+    baseValue: 3,
+    rarity: 'rare',
+    quantity: 15,
+    image: '/images/pokeballs/ultra-ball.png'
+  },
+  {
+    name: 'Master Ball',
+    baseValue: 5,
+    rarity: 'ultra_rare',
+    quantity: 5,
+    image: '/images/pokeballs/master-ball.png'
   }
-  types: Array<{
-    slot: number
-    type: {
-      name: string
-    }
-  }>
-  entry?: FamilyPokedexEntry
-} 
+] 

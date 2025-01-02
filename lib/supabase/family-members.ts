@@ -1,117 +1,113 @@
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from './client'
+import { FamilyMember } from '@/types/family'
 
-export interface FamilyMember {
-  id: string
-  display_name: string
-  chatflow_id?: string
-  family_id: string
-  full_name: string
-  role_id: string
-  starter_pokemon_form_id: string
-  avatar_url?: string
-  created_at: string
-  updated_at: string
+// Helper function to convert snake_case to camelCase
+const toCamelCase = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(v => toCamelCase(v))
+  } else if (obj !== null && obj.constructor === Object) {
+    return Object.keys(obj).reduce(
+      (result, key) => ({
+        ...result,
+        [key.replace(/([-_][a-z])/g, group =>
+          group.toUpperCase().replace('-', '').replace('_', '')
+        )]: toCamelCase(obj[key])
+      }),
+      {}
+    )
+  }
+  return obj
+}
+
+// Helper function to convert camelCase to snake_case
+const toSnakeCase = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(v => toSnakeCase(v))
+  } else if (obj !== null && obj.constructor === Object) {
+    return Object.keys(obj).reduce(
+      (result, key) => ({
+        ...result,
+        [key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)]: toSnakeCase(obj[key])
+      }),
+      {}
+    )
+  }
+  return obj
 }
 
 export const FamilyMembersAPI = {
-  // Get all family members
   async getFamilyMembers(): Promise<FamilyMember[]> {
     try {
       const supabase = createClient()
+
+      // Check auth state
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError) throw authError
+      if (!user) throw new Error('No authenticated user found')
+
       const { data, error } = await supabase
         .from('family_members')
-        .select(`
-          id,
-          display_name,
-          chatflow_id,
-          family_id,
-          full_name,
-          role_id,
-          starter_pokemon_form_id,
-          avatar_url,
-          created_at,
-          updated_at
-        `)
-        .order('display_name')
+        .select('*')
+        .eq('family_id', user.id)
 
       if (error) throw error
-      return data || []
+
+      // Transform the data to include full avatar URLs and convert to camelCase
+      const membersWithAvatars = await Promise.all(data.map(async (member) => {
+        const camelCaseMember = toCamelCase(member)
+        if (camelCaseMember.avatarUrl) {
+          const { data: { publicUrl } } = supabase
+            .storage
+            .from('avatars')
+            .getPublicUrl(camelCaseMember.avatarUrl)
+          
+          return {
+            ...camelCaseMember,
+            avatarUrl: publicUrl
+          }
+        }
+        return camelCaseMember
+      }))
+
+      return membersWithAvatars
     } catch (error) {
       console.error('Error fetching family members:', error)
       throw error
     }
   },
 
-  // Update a family member's chatflow assignment
-  async updateChatflowAssignment(memberId: string, chatflowId: string | null): Promise<void> {
-    if (!memberId) {
-      throw new Error('Member ID is required')
-    }
-
+  async updateMemberAvatar(memberId: string, file: File): Promise<string> {
     try {
       const supabase = createClient()
       
-      console.debug('Updating chatflow assignment:', {
-        memberId,
-        chatflowId,
-        timestamp: new Date().toISOString()
-      })
+      // Upload the file to Supabase storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${memberId}-${Date.now()}.${fileExt}`
+      
+      const { error: uploadError, data } = await supabase
+        .storage
+        .from('avatars')
+        .upload(fileName, file)
 
-      const { data, error } = await supabase
+      if (uploadError) throw uploadError
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      // Update the member's avatarUrl
+      const { error: updateError } = await supabase
         .from('family_members')
-        .update({ 
-          chatflow_id: chatflowId,
-          updated_at: new Date().toISOString()
-        })
+        .update(toSnakeCase({ avatarUrl: fileName }))
         .eq('id', memberId)
-        .select()
-        .single()
 
-      console.debug('Update result:', {
-        success: !!data,
-        error,
-        member: data,
-        timestamp: new Date().toISOString()
-      })
+      if (updateError) throw updateError
 
-      if (error) {
-        // Handle specific error cases
-        if (error.code === '42501') {
-          throw new Error('You do not have permission to update this family member')
-        }
-        if (error.code === 'P0001' && error.message.includes('does not exist')) {
-          throw new Error('The selected chatflow does not exist')
-        }
-        throw error
-      }
-
-    } catch (error: unknown) {
-      console.error('Error updating chatflow assignment:', {
-        memberId,
-        chatflowId,
-        error: error instanceof Error ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack
-        } : error,
-        timestamp: new Date().toISOString()
-      })
-      throw error
-    }
-  },
-
-  // Remove chatflow assignments for a specific chatflow
-  async removeChatflowAssignments(chatflowId: string): Promise<void> {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('family_members')
-        .update({ chatflow_id: null })
-        .eq('chatflow_id', chatflowId)
-
-      if (error) throw error
+      return publicUrl
     } catch (error) {
-      console.error('Error removing chatflow assignments:', error)
+      console.error('Error updating avatar:', error)
       throw error
     }
   }

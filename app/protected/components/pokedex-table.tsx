@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Search, SortAsc, Filter } from "lucide-react"
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import type { FamilyPokedexEntry, PokemonWithEntry } from '../../../types/pokemon'
+import type { FamilyPokedexEntry, PokemonWithEntry } from '../../../types/pokedex'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -132,10 +132,10 @@ export function PokedexTable({ entries, totalCaught, totalAvailable }: PokedexTa
                           </div>
                         </TableCell>
                         <TableCell>
-                          {entry.caughtBy?.display_name || "Unknown"}
+                          {entry.caughtBy?.displayName || "Unknown"}
                         </TableCell>
                         <TableCell>
-                          {new Date(entry.caught_at).toLocaleDateString()}
+                          {new Date(entry.caughtAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm">

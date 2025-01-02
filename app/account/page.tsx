@@ -1,6 +1,8 @@
 import AccountForm from './account-form'
+import FamilyTaskManager from '@/components/family-task-manager'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export default async function Account() {
   const supabase = await createClient()
@@ -13,8 +15,19 @@ export default async function Account() {
 
   return (
     <div className="flex-1 w-full flex flex-col gap-20 items-center">
-      <div className="w-full max-w-xl p-4 sm:p-8">
-        <AccountForm user={user} />
+      <div className="w-full max-w-7xl p-4 sm:p-8">
+        <Tabs defaultValue="profile" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="profile">Family Profile</TabsTrigger>
+            <TabsTrigger value="tasks">Task Management</TabsTrigger>
+          </TabsList>
+          <TabsContent value="profile">
+            <AccountForm user={user} />
+          </TabsContent>
+          <TabsContent value="tasks">
+            <FamilyTaskManager />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

@@ -6,6 +6,15 @@ import { Button } from "./ui/button";
 import { createClient } from "@/utils/supabase/server";
 import AvatarCircles from "./ui/avatar-circles";
 import { getAvatarUrl } from "@/utils/get-avatar-url";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Settings, LogOut } from "lucide-react";
 
 export default async function AuthButton() {
   const supabase = await createClient();
@@ -72,18 +81,38 @@ export default async function AuthButton() {
         Welcome to {familyProfile?.data?.family_name || "The Family Poké Gym"}!
       </span>
       
-      <div className="flex items-center gap-2">
-        <AvatarCircles 
-          avatarUrls={avatarData}
-          className="hover:opacity-80 transition cursor-pointer"
-        />
-
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline" size="sm">
-            Sign out
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
+            <AvatarCircles 
+              avatarUrls={avatarData}
+              className="hover:opacity-80 transition"
+            />
           </Button>
-        </form>
-      </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56" align="end" forceMount>
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none">{familyProfile?.data?.family_name}</p>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link href="/account" className="cursor-pointer">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <form action={signOutAction} className="w-full">
+              <button type="submit" className="flex w-full items-center">
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sign out</span>
+              </button>
+            </form>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   ) : (
     <div className="flex gap-2">
