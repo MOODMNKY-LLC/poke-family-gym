@@ -2,27 +2,19 @@
 
 import { Button } from '@/components/ui/button'
 import { RefreshCw } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
-export function RefreshButton() {
-  const router = useRouter()
-  const [isRefreshing, setIsRefreshing] = useState(false)
+interface RefreshButtonProps {
+  onRefresh: () => Promise<void>
+}
 
+export function RefreshButton({ onRefresh }: RefreshButtonProps) {
   return (
     <Button
-      variant="ghost"
+      variant="outline"
       size="icon"
-      onClick={async () => {
-        setIsRefreshing(true)
-        router.refresh()
-        // Add a small delay to show the loading state
-        await new Promise(resolve => setTimeout(resolve, 500))
-        setIsRefreshing(false)
-      }}
-      disabled={isRefreshing}
+      onClick={onRefresh}
     >
-      <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+      <RefreshCw className="h-4 w-4" />
     </Button>
   )
 } 
