@@ -12,7 +12,8 @@ import {
   Search,
   SortAsc,
   Filter,
-  Bot
+  Bot,
+  Zap
 } from "lucide-react"
 import Link from "next/link"
 import { redirect } from "next/navigation"
@@ -42,6 +43,8 @@ import { FamilyMembersGrid } from './components/family-members-grid'
 import { PokemonGrid } from "@/app/pokedex/components/pokemon-grid"
 import { FamilyPokedexGrid } from './components/family-pokedex-grid'
 import { PokeDexter } from './components/poke-dexter'
+import { SynergyStats } from './components/synergy/synergy-stats'
+import { StreakStats } from './components/synergy/streak-stats'
 
 // Define PokemonWithEntry type locally since it's only used here
 interface PokemonWithEntry extends Pokemon {
@@ -101,6 +104,28 @@ export default async function ProtectedPage() {
   const gymLevel = Math.floor((dashboardData.gymStats?.totalPokeballs || 0) / 100) + 1
   const pointsToNextLevel = 100 - ((dashboardData.gymStats?.totalPokeballs || 0) % 100)
 
+  // Fetch synergy data
+  const { data: synergyData } = await supabase
+    .from('family_synergy')
+    .select('*')
+    .eq('family_id', user.id)
+    .order('synergy_date', { ascending: false })
+    .limit(1)
+    .single()
+
+  // Fetch streak data with member names
+  const { data: streakData } = await supabase
+    .from('task_streaks')
+    .select(`
+      *,
+      member:member_id (
+        display_name,
+        avatar_url
+      )
+    `)
+    .eq('family_id', user.id)
+    .order('current_streak', { ascending: false })
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background/80 to-background">
       <div className="flex-1 space-y-8 p-8 pt-6 container mx-auto max-w-7xl relative">
@@ -122,7 +147,7 @@ export default async function ProtectedPage() {
 
           <Tabs defaultValue="overview" className="space-y-8">
             <TabsList className={cn(
-              "grid w-full grid-cols-6 lg:w-[720px] mx-auto",
+              "grid w-full grid-cols-7 lg:w-[840px] mx-auto",
               "glass-effect glass-border"
             )}>
               <TabsTrigger 
@@ -190,6 +215,17 @@ export default async function ProtectedPage() {
               >
                 <Bot className="w-4 h-4" />
                 PokéDexter
+              </TabsTrigger>
+              <TabsTrigger 
+                value="synergy" 
+                className={cn(
+                  "flex items-center gap-2",
+                  "data-[state=active]:bg-primary/10",
+                  "data-[state=active]:text-primary"
+                )}
+              >
+                <Zap className="w-4 h-4" />
+                Synergy
               </TabsTrigger>
             </TabsList>
 
@@ -288,6 +324,27 @@ export default async function ProtectedPage() {
                   <PokeDexter />
                 </div>
               </TabsContent>
+
+              <TabsContent value="synergy">
+                <div className="space-y-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-primary">
+                        Family Synergy
+                      </h2>
+                      <p className="text-muted-foreground">
+                        Track your family's collaborative achievements and streaks
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-8 md:grid-cols-2">
+                    <SynergyStats synergy={synergyData} />
+                    <StreakStats streaks={streakData} />
+                  </div>
+                </div>
+              </TabsContent>
+
             </AnimatedTabContent>
           </Tabs>
         </div>
