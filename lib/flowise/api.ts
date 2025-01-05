@@ -9,19 +9,64 @@ import type {
 } from '.'
 import { validateFlowiseConfig, FlowiseAPIError } from '.'
 
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number,
+  timeout: number
+): Promise<Response> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      // If we get a 502/503/504, we'll retry
+      if (response.status >= 502 && response.status <= 504) {
+        throw new Error(`Server error: ${response.status}`)
+      }
+      
+      return response
+    } catch (error) {
+      lastError = error as Error
+      console.warn(`Attempt ${attempt + 1}/${maxRetries} failed:`, error)
+      
+      // Don't wait on the last attempt
+      if (attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        await sleep(Math.pow(2, attempt) * 1000)
+      }
+    }
+  }
+  
+  throw lastError || new Error('All retry attempts failed')
+}
+
 export class FlowiseAPI {
   private static async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const { apiUrl, apiKey } = validateFlowiseConfig()
+    const config = validateFlowiseConfig()
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-    const url = `${apiUrl}${normalizedEndpoint}`
+    const url = `${config.apiUrl}${normalizedEndpoint}`
 
     const headers = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${config.apiKey}`,
       ...options.headers
     }
 
@@ -35,10 +80,12 @@ export class FlowiseAPI {
     })
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers
-      })
+      const response = await fetchWithRetry(
+        url,
+        { ...options, headers },
+        config.maxRetries || 3,
+        config.timeout || 30000
+      )
 
       console.debug('Flowise API Response:', {
         status: response.status,
@@ -53,7 +100,7 @@ export class FlowiseAPI {
       const text = await response.text()
       console.debug('Flowise API Response Body:', text.substring(0, 500))
 
-      // Check if response is HTML
+      // Check if response is HTML (error page)
       if (contentType?.includes('text/html') || text.trim().startsWith('<!DOCTYPE')) {
         console.error('Received HTML instead of JSON:', {
           url,
@@ -103,9 +150,27 @@ export class FlowiseAPI {
 
       // Handle API errors
       if (!response.ok) {
+        const errorMessage = data?.message || response.statusText
+        const errorCode = data?.code || 'API_ERROR'
+        
+        // Special handling for common errors
+        if (response.status === 502) {
+          throw new FlowiseAPIError(
+            'The Flowise server is currently unavailable. Please try again later.',
+            'SERVER_UNAVAILABLE'
+          )
+        }
+        
+        if (response.status === 401) {
+          throw new FlowiseAPIError(
+            'Invalid API key or unauthorized access.',
+            'UNAUTHORIZED'
+          )
+        }
+        
         throw new FlowiseAPIError(
-          data?.message || 'An error occurred',
-          data?.code || 'API_ERROR',
+          errorMessage,
+          errorCode,
           {
             ...data?.details,
             status: response.status,
@@ -114,7 +179,7 @@ export class FlowiseAPI {
         )
       }
 
-      // For list responses, wrap in the expected format if not already wrapped
+      // For list responses, wrap in expected format if not already wrapped
       if (Array.isArray(data) && endpoint.includes('/chatflows')) {
         if (!data[0]?.id) {
           console.warn('Unexpected chatflows response format:', data)
@@ -131,6 +196,14 @@ export class FlowiseAPI {
     } catch (error) {
       if (error instanceof FlowiseAPIError) {
         throw error
+      }
+
+      // Handle timeout errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new FlowiseAPIError(
+          'Request timed out. The server took too long to respond.',
+          'TIMEOUT'
+        )
       }
 
       console.error('Flowise API request failed:', error)

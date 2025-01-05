@@ -57,12 +57,17 @@ export default function TrainerAccessPage({ params }: PageProps) {
     return null // or a loading spinner
   }
 
+  const handleSuccess = (memberId: string) => {
+    window.location.href = `/protected/trainers/${memberId}/profile`
+  }
+
   return (
     <PinAccessDialog
       memberId={member.id}
       memberName={member.display_name}
       isOpen={showDialog}
       onClose={() => window.location.href = '/protected'}
+      onSuccess={handleSuccess}
     />
   )
 } 

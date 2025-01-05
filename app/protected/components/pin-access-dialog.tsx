@@ -16,12 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { PinSetupDialog } from './pin-setup-dialog'
 
 interface PinAccessDialogProps {
   memberId: string
   memberName: string
   isOpen: boolean
   onClose: () => void
+  onSuccess: (memberId: string) => void
 }
 
 export function PinAccessDialog({ 
@@ -29,9 +31,11 @@ export function PinAccessDialog({
   memberName, 
   isOpen, 
   onClose,
+  onSuccess,
 }: PinAccessDialogProps) {
   const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
   const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,30 +43,111 @@ export function PinAccessDialog({
     
     try {
       setLoading(true)
+      console.log('Attempting PIN verification:', {
+        memberId,
+        pinLength: pin.length,
+        timestamp: new Date().toISOString()
+      })
 
-      // Verify the PIN
-      const { data, error } = await supabase
-        .from('family_members')
-        .select('id')
-        .eq('id', memberId)
-        .eq('pin', pin)
-        .single()
-
-      if (error || !data) {
-        throw new Error('Invalid PIN')
+      // Format PIN to match database format (exactly 6 digits)
+      const formattedPin = pin.replace(/\D/g, '').padStart(6, '0')
+      
+      // Validate PIN format matches database constraint (^[0-9]{6}$)
+      if (!formattedPin.match(/^[0-9]{6}$/)) {
+        console.log('Invalid PIN format:', {
+          formattedPinLength: formattedPin.length,
+          matchesPattern: !!formattedPin.match(/^[0-9]{6}$/)
+        })
+        throw new Error('Invalid PIN format')
       }
 
-      // PIN is correct
-      toast.success('Access granted!')
-      
-      // Navigate to profile page
-      window.location.href = `/protected/trainers/${memberId}/profile`
-    } catch (error: any) {
-      toast.error('Invalid PIN. Please try again.')
+      // First, fetch the member's data
+      const { data, error } = await supabase
+        .from('family_members')
+        .select('id, display_name, pin')
+        .eq('id', memberId)
+        .single()
+
+      if (error) {
+        console.error('Supabase query error:', error)
+        throw new Error('Failed to verify PIN')
+      }
+
+      if (!data || !data.pin) {
+        console.log('No PIN set, showing setup dialog')
+        setShowSetup(true)
+        return
+      }
+
+      // Clean and normalize PINs for comparison
+      const storedPin = data.pin.trim()
+      const cleanStoredPin = storedPin.replace(/\s+/g, '')
+      const cleanFormattedPin = formattedPin.replace(/\s+/g, '')
+
+      console.log('PIN Comparison Debug:', {
+        storedPinLength: data.pin.length,
+        trimmedStoredPinLength: storedPin.length,
+        cleanStoredPinLength: cleanStoredPin.length,
+        formattedPinLength: formattedPin.length,
+        cleanFormattedPinLength: cleanFormattedPin.length,
+        storedPinChars: Array.from<string>(data.pin).map(c => c.charCodeAt(0)),
+        cleanStoredPinChars: Array.from<string>(cleanStoredPin).map(c => c.charCodeAt(0)),
+        formattedPinChars: Array.from<string>(formattedPin).map(c => c.charCodeAt(0))
+      })
+
+      // Try multiple comparison methods
+      const matches = {
+        exact: data.pin === formattedPin,
+        trimmed: storedPin === formattedPin,
+        clean: cleanStoredPin === cleanFormattedPin,
+        normalized: cleanStoredPin === cleanFormattedPin.padEnd(6, ' '),
+        chars: Array.from(cleanStoredPin).every((char, i) => char === cleanFormattedPin[i])
+      }
+
+      console.log('PIN comparison results:', matches)
+
+      // Accept any valid match method
+      if (Object.values(matches).some(match => match === true)) {
+        console.log('PIN verified successfully')
+        toast.success('Access granted!')
+        onSuccess(memberId)
+        return
+      }
+
+      console.log('PIN verification failed:', {
+        storedPin: '[REDACTED]',
+        formattedPin: '[REDACTED]',
+        matches
+      })
+      throw new Error('Invalid PIN')
+
+    } catch (error) {
+      console.error('PIN verification failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Invalid PIN. Please try again.')
       setPin('')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSetupSuccess = () => {
+    setShowSetup(false)
+    onSuccess(memberId)
+  }
+
+  if (showSetup) {
+    return (
+      <PinSetupDialog
+        memberId={memberId}
+        memberName={memberName}
+        isOpen={true}
+        onClose={() => {
+          setShowSetup(false)
+          onClose()
+        }}
+        onSuccess={handleSetupSuccess}
+      />
+    )
   }
 
   return (

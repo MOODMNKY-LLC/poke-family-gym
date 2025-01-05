@@ -44,7 +44,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { createClient, type FamilyMember } from '@/lib/supabase/client'
 import { v4 as uuidv4 } from 'uuid'
 import Link from 'next/link'
-import { FlowiseAPI } from '@/lib/flowise/api'
+import { FlowiseAPI, FlowiseAPIError } from '@/lib/flowise'
 import socketIOClient from 'socket.io-client'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -1186,6 +1186,7 @@ export function PokeDexter() {
   useEffect(() => {
     async function fetchChatflows() {
       try {
+        console.debug('Fetching chatflows...')
         const data = await FlowiseAPI.getChatFlows()
         const convertedChatflows = data.chatflows
           .filter((cf): cf is Required<typeof cf> => Boolean(cf?.id))
@@ -1195,6 +1196,8 @@ export function PokeDexter() {
             flowData: cf.flowData,
             chatbotConfig: cf.chatbotConfig
           }))
+        
+        console.debug('Fetched chatflows:', convertedChatflows)
         setChatflows(convertedChatflows)
         
         // Set default chatflow
@@ -1202,6 +1205,34 @@ export function PokeDexter() {
         setCurrentChatflowId(defaultId)
       } catch (error) {
         console.error('Error fetching chatflows:', error)
+        
+        // Handle specific error types
+        if (error instanceof FlowiseAPIError) {
+          switch (error.code) {
+            case 'SERVER_UNAVAILABLE':
+              setError('The AI service is currently unavailable. Please try again later.')
+              break
+            case 'UNAUTHORIZED':
+              setError('Unable to connect to the AI service due to authentication issues.')
+              break
+            case 'TIMEOUT':
+              setError('The AI service is taking too long to respond. Please try again.')
+              break
+            default:
+              setError(`AI service error: ${error.message}`)
+          }
+        } else {
+          setError('Unable to connect to the AI service. Please try again later.')
+        }
+        
+        // Set a fallback message for empty chatflows
+        setMessages([{
+          id: '1',
+          content: "I'm currently experiencing connection issues. Please try again later or contact support if the problem persists.",
+          role: 'assistant',
+          createdAt: new Date().toISOString(),
+          error: true
+        }])
       }
     }
 

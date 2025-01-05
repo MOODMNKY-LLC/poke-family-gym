@@ -45,6 +45,8 @@ import { FamilyPokedexGrid } from './components/family-pokedex-grid'
 import { PokeDexter } from './components/poke-dexter'
 import { SynergyStats } from './components/synergy/synergy-stats'
 import { StreakStats } from './components/synergy/streak-stats'
+import { PokePackShop } from './components/poke-pack-shop'
+import { ShopTab } from './components/shop-tab'
 
 // Define PokemonWithEntry type locally since it's only used here
 interface PokemonWithEntry extends Pokemon {
@@ -281,17 +283,10 @@ export default async function ProtectedPage() {
               </TabsContent>
 
               <TabsContent value="shop">
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-primary">
-                      Poké Shop
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Spend your hard-earned Pokéballs on rewards and items
-                    </p>
-                  </div>
-                  <ShopItems />
-                </div>
+                <ShopTab 
+                  availableTokens={dashboardData.gymStats?.totalPokeballs || 0}
+                  userId={user.id}
+                />
               </TabsContent>
 
               <TabsContent value="leaderboard">

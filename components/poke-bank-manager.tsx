@@ -33,10 +33,10 @@ import { ArrowLeftRight, History, Wallet, ArrowUpDown } from 'lucide-react'
 
 // Exchange rates in terms of regular Poké Balls
 const EXCHANGE_RATES = {
-  poke_ball: 1,
-  great_ball: 10,
-  ultra_ball: 50,
-  master_ball: 100
+  poke_ball: 1,     // Base value (1 Poké Ball)
+  great_ball: 10,   // 10x value (10 Poké Balls) - Achievable from a day of basic tasks
+  ultra_ball: 25,   // 25x value (25 Poké Balls) - Achievable from a few days of consistent work
+  master_ball: 50   // 50x value (50 Poké Balls) - Achievable from a week of dedicated effort
 } as const
 
 type BallType = keyof typeof EXCHANGE_RATES
