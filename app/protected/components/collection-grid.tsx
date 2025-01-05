@@ -30,7 +30,7 @@ import { createClient } from '@/utils/supabase/client'
 interface CollectionPokemon {
   id: string
   member_id: string
-  pokemon_form_id: number
+  pokemon_id: number
   nickname: string | null
   level: number
   obtained_at: string
@@ -96,37 +96,26 @@ export function CollectionGrid({ collection: initialCollection, memberId }: Coll
       setIsLoading(true)
       
       try {
+        // Get the pokemon_ids from our collection
+        const collectedPokemonIds = new Set(collection.map(p => p.pokemon_form.species.id))
         const [start, end] = generation.range
         const pokemonPromises = []
         
+        // Only fetch Pokémon that are in our collection
         for (let i = start; i <= end; i++) {
-          pokemonPromises.push(api.getPokemonById(i))
+          if (collectedPokemonIds.has(i)) {
+            pokemonPromises.push(api.getPokemonById(i))
+          }
         }
 
         const pokemonData = await Promise.all(pokemonPromises)
-        const collectedIds = new Set(collection.map(p => p.pokemon_form.species.id))
-
-        console.log('Collection data:', {
-          length: collection.length,
-          firstEntry: collection[0],
-          collectedIds: Array.from(collectedIds)
-        })
 
         const enrichedPokemon = pokemonData.map(pokemon => {
           const collectionEntry = collection.find(
             c => c.pokemon_form.species.id === pokemon.id
           )
 
-          console.log(`Enriching Pokemon ${pokemon.id} (${pokemon.name}):`, {
-            inCollection: collectedIds.has(pokemon.id),
-            collectionEntry: collectionEntry ? {
-              id: collectionEntry.id,
-              pokemon_form_id: collectionEntry.pokemon_form_id,
-              species_id: collectionEntry.pokemon_form.species.id
-            } : 'Not found'
-          })
-
-          const enriched = {
+          return {
             ...pokemon,
             collectionId: collectionEntry?.id || null,
             nickname: collectionEntry?.nickname || null,
@@ -134,17 +123,9 @@ export function CollectionGrid({ collection: initialCollection, memberId }: Coll
             obtained_at: collectionEntry?.obtained_at || null,
             is_starter: collectionEntry?.is_starter || false,
             is_favorite: collectionEntry?.is_favorite || false,
-            is_collected: collectedIds.has(pokemon.id),
+            is_collected: true, // All Pokémon we fetch are collected
             generation_id: selectedGeneration
           }
-
-          return enriched
-        })
-
-        console.log('Enriched Pokemon summary:', {
-          total: enrichedPokemon.length,
-          collected: enrichedPokemon.filter(p => p.is_collected).length,
-          firstCollected: enrichedPokemon.find(p => p.is_collected)
         })
 
         setAllPokemon(enrichedPokemon)
@@ -160,51 +141,15 @@ export function CollectionGrid({ collection: initialCollection, memberId }: Coll
 
   // Filter and sort Pokemon
   const filteredAndSortedPokemon = useMemo(() => {
-    if (!allPokemon.length) {
-      console.log('No Pokemon in allPokemon')
-      return []
-    }
+    if (!allPokemon.length) return []
 
     let result = [...allPokemon]
-    console.log('Starting with Pokemon:', result.length)
-    console.log('Collection state:', collection)
-    console.log('First few Pokemon in result:', result.slice(0, 3).map(p => ({
-      id: p.id,
-      name: p.name,
-      isCollected: p.is_collected,
-      collectionId: p.collectionId
-    })))
-
-    // Apply collected filter
-    if (showCollectedOnly) {
-      result = result.filter(pokemon => {
-        const isCollected = pokemon.is_collected
-        console.log(`Pokemon ${pokemon.id} (${pokemon.name}):`, {
-          isCollected,
-          collectionId: pokemon.collectionId,
-          level: pokemon.level,
-          obtainedAt: pokemon.obtained_at
-        })
-        return isCollected
-      })
-      console.log('After collected filter:', result.length, 'Pokemon')
-      if (result.length > 0) {
-        console.log('First collected Pokemon:', {
-          id: result[0].id,
-          name: result[0].name,
-          isCollected: result[0].is_collected,
-          collectionId: result[0].collectionId
-        })
-      }
-    }
 
     // Apply type filter
     if (selectedType) {
-      result = result.filter(pokemon => {
-        const hasType = pokemon.types.some(t => t.type.name === selectedType.toLowerCase())
-        return hasType
-      })
-      console.log('After type filter:', result.length, 'Pokemon')
+      result = result.filter(pokemon => 
+        pokemon.types.some(t => t.type.name === selectedType.toLowerCase())
+      )
     }
 
     // Apply sorting
@@ -219,9 +164,8 @@ export function CollectionGrid({ collection: initialCollection, memberId }: Coll
       }
     })
 
-    console.log('Final filtered and sorted Pokemon:', result.length)
     return result
-  }, [allPokemon, selectedType, sortBy, showCollectedOnly, collection])
+  }, [allPokemon, selectedType, sortBy])
 
   const toggleFavorite = async (pokemonId: string) => {
     if (!pokemonId) return

@@ -11,8 +11,7 @@ export async function createSupabaseServerClient() {
       cookies: {
         async get(name: string) {
           const cookieStore = await cookies()
-          const cookie = cookieStore.get(name)
-          return cookie?.value
+          return cookieStore.get(name)?.value
         },
         async set(name: string, value: string, options: CookieOptions) {
           const cookieStore = await cookies()
@@ -21,7 +20,7 @@ export async function createSupabaseServerClient() {
               name,
               value,
               ...options
-            })
+            } as ResponseCookie)
           } catch (error) {
             console.error('Error setting cookie:', error)
           }
@@ -34,7 +33,7 @@ export async function createSupabaseServerClient() {
               value: '',
               ...options,
               maxAge: 0
-            })
+            } as ResponseCookie)
           } catch (error) {
             console.error('Error removing cookie:', error)
           }

@@ -57,7 +57,7 @@ type PageProps = {
 interface CollectionPokemon {
   id: string
   member_id: string
-  pokemon_form_id: number
+  pokemon_id: number
   nickname: string | null
   level: number
   obtained_at: string
@@ -235,13 +235,13 @@ export default async function TrainerProfilePage({ params, searchParams }: PageP
     .select(`
       id,
       member_id,
-      pokemon_form_id,
+      pokemon_id,
       nickname,
       level,
       obtained_at,
       is_starter,
       is_favorite,
-      pokemon_form:pokemon_forms!personal_pokemon_collections_pokemon_form_id_fkey (
+      pokemon_form:pokemon_forms (
         id,
         name,
         species:pokemon_species (
@@ -256,12 +256,8 @@ export default async function TrainerProfilePage({ params, searchParams }: PageP
 
   // Debug logging
   console.log('Member ID:', id)
-  console.log('Collection query:', {
-    data: collection,
-    error: collectionError,
-    memberHasStarter: member.starter_pokemon_form_id !== null,
-    starterPokemon: member.starter_pokemon
-  })
+  console.log('Collection data:', collection)
+  console.log('Collection error:', collectionError)
 
   // Fetch teams
   const { data: teams } = await supabase
