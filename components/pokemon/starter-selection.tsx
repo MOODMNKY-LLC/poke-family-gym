@@ -122,35 +122,10 @@ export function StarterSelection({ onSelect, selectedGeneration = 1 }: StarterSe
     setIsSelecting(true)
 
     try {
-      // Sync the selected starter's data with our pokemon table
-      const supabase = createClient()
-      const { error: syncError } = await supabase
-        .from('pokemon')
-        .upsert({
-          id: selectedStarter.id,
-          name: selectedStarter.name,
-          types: selectedStarter.types,
-          stats: {
-            hp: selectedStarter.stats.find(s => s.name === 'hp')?.base || 0,
-            attack: selectedStarter.stats.find(s => s.name === 'attack')?.base || 0,
-            defense: selectedStarter.stats.find(s => s.name === 'defense')?.base || 0,
-            'special-attack': selectedStarter.stats.find(s => s.name === 'special-attack')?.base || 0,
-            'special-defense': selectedStarter.stats.find(s => s.name === 'special-defense')?.base || 0,
-            speed: selectedStarter.stats.find(s => s.name === 'speed')?.base || 0
-          },
-          sprites: {
-            front_default: selectedStarter.spriteUrl
-          }
-        })
-
-      if (syncError) {
-        throw syncError
-      }
-
-      // Call the onSelect callback
+      // Call the onSelect callback with the selected starter's ID and nickname
       onSelect(selectedStarter.id, nickname)
     } catch (error) {
-      console.error('Failed to sync starter data:', error)
+      console.error('Failed to select starter:', error)
       toast.error('Failed to select starter Pokémon')
       setIsSelecting(false)
     }
