@@ -1,77 +1,107 @@
 "use client"
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Home, Book, User, Menu } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from '@/components/ui/sheet'
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Menu } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useState } from "react"
 
 const routes = [
   {
-    href: '/',
-    label: 'Home',
-    icon: Home
+    href: "/",
+    label: "Home",
   },
   {
-    href: '/pokedex',
-    label: 'Pokédex',
-    icon: Book
+    href: "/protected",
+    label: "Dashboard",
   },
   {
-    href: '/account',
-    label: 'Profile',
-    icon: User
-  }
+    href: "/pokedex",
+    label: "Pokédex",
+  },
+  {
+    href: "/trainers",
+    label: "Trainers",
+  },
+  {
+    href: "/guide",
+    label: "Guide",
+  },
 ]
 
 export function MobileNav() {
   const pathname = usePathname()
+  const [open, setOpen] = useState(false)
 
   return (
-    <>
-      {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 z-50 w-full h-16 bg-background border-t md:hidden">
-        <div className="grid h-full max-w-lg grid-cols-3 mx-auto">
-          {routes.map((route) => {
-            const Icon = route.icon
-            return (
-              <Link
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild className="md:hidden fixed bottom-4 right-4 z-50">
+        <Button 
+          variant="outline" 
+          size="icon"
+          className="h-12 w-12 rounded-full glass-effect glass-border"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="bottom" className="h-[96%] pt-10 rounded-t-3xl">
+        <div className="flex flex-col gap-6">
+          <div className="space-y-1">
+            {routes.map((route) => (
+              <Button
                 key={route.href}
-                href={route.href}
-                className={cn(
-                  'inline-flex flex-col items-center justify-center px-5 hover:bg-muted/50 group',
-                  pathname === route.href && 'text-primary'
-                )}
+                variant={pathname === route.href ? "default" : "ghost"}
+                className="w-full justify-start text-lg font-medium"
+                asChild
+                onClick={() => setOpen(false)}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs">{route.label}</span>
-              </Link>
-            )
-          })}
-        </div>
-      </nav>
+                <Link href={route.href}>
+                  {route.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
 
-      {/* Mobile Menu Button - For additional items */}
-      <div className="fixed top-2 right-2 z-50 md:hidden">
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-[300px] bg-background">
-            <div className="flex flex-col gap-4 mt-4">
-              <h2 className="text-lg font-bold">Menu</h2>
-              {/* Add additional menu items here */}
+          <div className="border-t pt-4">
+            <div className="text-sm text-muted-foreground">
+              Quick Links
             </div>
-          </SheetContent>
-        </Sheet>
-      </div>
-    </>
+            <div className="mt-2 space-y-1">
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-base"
+                asChild
+                onClick={() => setOpen(false)}
+              >
+                <Link href="/account">
+                  Settings
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-base"
+                asChild
+                onClick={() => setOpen(false)}
+              >
+                <Link href="/protected/shop">
+                  Shop
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-base"
+                asChild
+                onClick={() => setOpen(false)}
+              >
+                <Link href="/protected/tasks">
+                  Tasks
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 } 

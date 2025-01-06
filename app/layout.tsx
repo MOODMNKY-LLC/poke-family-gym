@@ -1,6 +1,6 @@
 import DeployButton from "@/components/deploy-button";
 import { EnvVarWarning } from "@/components/env-var-warning";
-import HeaderAuth from "@/components/header-auth";
+import { HeaderAuth } from "@/components/header-auth";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { MobileNav } from "@/components/mobile-nav";
 import { hasEnvVars } from "@/utils/supabase/check-env-vars";

@@ -194,57 +194,64 @@ export default function PokeInventoryManager() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-    const supabase = createClient()
+      const supabase = createClient()
 
       // Get current user's family ID
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
+      // Get the user's family member record
       const { data: familyMember, error: memberError } = await supabase
         .from('family_members')
         .select('family_id')
         .eq('id', user.id)
-        .single()
+        .limit(1)
+        .maybeSingle()
 
       if (memberError) throw memberError
       if (!familyMember?.family_id) throw new Error('No family found')
       
       setFamilyId(familyMember.family_id)
       
-      // Load lootboxes
+      // Load lootboxes for this family
       const { data: lootboxData, error: lootboxError } = await supabase
         .from('family_lootboxes')
-      .select('*')
+        .select('*')
         .eq('family_id', familyMember.family_id)
         .order('created_at', { ascending: false })
 
       if (lootboxError) throw lootboxError
       setLootboxes(lootboxData || [])
 
-      // Load pokemon pools
+      // Load pokemon pools for this family's lootboxes
       const { data: poolData, error: poolError } = await supabase
         .from('lootbox_pokemon_pools')
-      .select('*')
-      .order('created_at', { ascending: false })
+        .select('*')
+        .in('lootbox_id', lootboxData?.map(box => box.id) || [])
+        .order('created_at', { ascending: false })
 
       if (poolError) throw poolError
 
-      // Load pokemon data for each pool
-      const pokemonIds = Array.from(new Set((poolData || []).map(pool => pool.pokemon_id)))
-      const { data: pokemonData, error: pokemonError } = await supabase
-        .from('pokemon')
-        .select('id, name, types, sprites, stats')
-        .in('id', pokemonIds)
+      if (poolData && poolData.length > 0) {
+        // Load pokemon data for each pool
+        const pokemonIds = Array.from(new Set(poolData.map(pool => pool.pokemon_id)))
+        const { data: pokemonData, error: pokemonError } = await supabase
+          .from('pokemon')
+          .select('id, name, types, sprites, stats')
+          .in('id', pokemonIds)
 
-      if (pokemonError) throw pokemonError
+        if (pokemonError) throw pokemonError
 
-      // Merge pokemon data with pool data
-      const poolsWithPokemon = (poolData || []).map(pool => ({
-        ...pool,
-        pokemon: pokemonData?.find(p => p.id === pool.pokemon_id)
-      }))
+        // Merge pokemon data with pool data
+        const poolsWithPokemon = poolData.map(pool => ({
+          ...pool,
+          pokemon: pokemonData?.find(p => p.id === pool.pokemon_id)
+        }))
 
-      setPokemonPools(poolsWithPokemon)
+        setPokemonPools(poolsWithPokemon)
+      } else {
+        setPokemonPools([])
+      }
 
     } catch (error: any) {
       console.error('Error loading data:', error.message)
